@@ -164,18 +164,148 @@ async def check_oig_exclusion(employee: Employee) -> VerificationResult:
         return error_result
 
 async def check_sam_exclusion(employee: Employee) -> VerificationResult:
-    """Check if employee is in SAM exclusion list - placeholder for SAM API integration"""
-    # Placeholder for SAM API integration - will implement when API key is available
-    result = VerificationResult(
-        employee_id=employee.id,
-        verification_type=VerificationType.SAM,
-        status=VerificationStatus.PENDING,
-        results={"message": "SAM API integration pending - API key required"},
-        data_source="SAM.gov API"
-    )
-    
-    await db.verification_results.insert_one(result.dict())
-    return result
+    """Check if employee is in SAM exclusion list using SAM.gov API"""
+    try:
+        sam_api_key = os.environ.get('SAM_API_KEY')
+        if not sam_api_key:
+            logger.warning("SAM API key not configured")
+            result = VerificationResult(
+                employee_id=employee.id,
+                verification_type=VerificationType.SAM,
+                status=VerificationStatus.ERROR,
+                error_message="SAM API key not configured",
+                data_source="SAM.gov API"
+            )
+            await db.verification_results.insert_one(result.dict())
+            return result
+
+        # SAM.gov API endpoint for exclusions
+        base_url = "https://api.sam.gov/entity-information/v3/exclusions"
+        
+        # Search parameters - we'll search by name and potentially SSN
+        params = {
+            "api_key": sam_api_key,
+            "q": f"{employee.first_name} {employee.last_name}",
+            "format": "json",
+            "page": "0",
+            "size": "10"
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            logger.info(f"Checking SAM exclusions for {employee.first_name} {employee.last_name}")
+            response = await client.get(base_url, params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Check if any exclusions were found
+                exclusions = data.get('exclusionDetails', [])
+                total_records = data.get('totalRecords', 0)
+                
+                is_excluded = total_records > 0
+                
+                # If we found matches, do additional verification
+                verified_matches = []
+                if exclusions:
+                    for exclusion in exclusions:
+                        # More sophisticated matching logic
+                        excl_first = exclusion.get('firstName', '').lower()
+                        excl_last = exclusion.get('lastName', '').lower()
+                        emp_first = employee.first_name.lower()
+                        emp_last = employee.last_name.lower()
+                        
+                        # Basic name matching - in production, you'd want more sophisticated fuzzy matching
+                        if excl_first == emp_first and excl_last == emp_last:
+                            verified_matches.append(exclusion)
+                
+                result = VerificationResult(
+                    employee_id=employee.id,
+                    verification_type=VerificationType.SAM,
+                    status=VerificationStatus.FAILED if len(verified_matches) > 0 else VerificationStatus.PASSED,
+                    results={
+                        "excluded": len(verified_matches) > 0,
+                        "total_records_found": total_records,
+                        "verified_matches": len(verified_matches),
+                        "match_details": verified_matches[:3] if verified_matches else [],  # Limit to first 3 matches
+                        "search_criteria": {
+                            "first_name": employee.first_name,
+                            "last_name": employee.last_name,
+                            "query": params["q"]
+                        },
+                        "api_response_summary": {
+                            "status_code": response.status_code,
+                            "total_records": total_records,
+                            "exclusions_count": len(exclusions)
+                        }
+                    },
+                    data_source="SAM.gov API"
+                )
+                
+            elif response.status_code == 401:
+                logger.error("SAM API authentication failed - check API key")
+                result = VerificationResult(
+                    employee_id=employee.id,
+                    verification_type=VerificationType.SAM,
+                    status=VerificationStatus.ERROR,
+                    error_message="SAM API authentication failed - invalid API key",
+                    results={"api_status_code": response.status_code},
+                    data_source="SAM.gov API"
+                )
+                
+            elif response.status_code == 429:
+                logger.error("SAM API rate limit exceeded")
+                result = VerificationResult(
+                    employee_id=employee.id,
+                    verification_type=VerificationType.SAM,
+                    status=VerificationStatus.ERROR,
+                    error_message="SAM API rate limit exceeded - try again later",
+                    results={"api_status_code": response.status_code},
+                    data_source="SAM.gov API"
+                )
+                
+            else:
+                logger.error(f"SAM API request failed with status {response.status_code}: {response.text}")
+                result = VerificationResult(
+                    employee_id=employee.id,
+                    verification_type=VerificationType.SAM,
+                    status=VerificationStatus.ERROR,
+                    error_message=f"SAM API request failed: HTTP {response.status_code}",
+                    results={
+                        "api_status_code": response.status_code,
+                        "api_response": response.text[:500]  # First 500 chars of error response
+                    },
+                    data_source="SAM.gov API"
+                )
+        
+        # Store result in database
+        await db.verification_results.insert_one(result.dict())
+        logger.info(f"SAM check completed for {employee.first_name} {employee.last_name}: {result.status}")
+        
+        return result
+        
+    except httpx.TimeoutException:
+        logger.error(f"SAM API timeout for employee {employee.id}")
+        error_result = VerificationResult(
+            employee_id=employee.id,
+            verification_type=VerificationType.SAM,
+            status=VerificationStatus.ERROR,
+            error_message="SAM API request timed out",
+            data_source="SAM.gov API"
+        )
+        await db.verification_results.insert_one(error_result.dict())
+        return error_result
+        
+    except Exception as e:
+        logger.error(f"Error checking SAM exclusion for employee {employee.id}: {e}")
+        error_result = VerificationResult(
+            employee_id=employee.id,
+            verification_type=VerificationType.SAM,
+            status=VerificationStatus.ERROR,
+            error_message=str(e),
+            data_source="SAM.gov API"
+        )
+        await db.verification_results.insert_one(error_result.dict())
+        return error_result
 
 # API Routes
 @api_router.get("/")
