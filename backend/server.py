@@ -940,34 +940,53 @@ async def cancel_subscription(current_user: User = Depends(get_current_user)):
             detail="Failed to cancel subscription"
         )
 
+# ========== EMPLOYEE MANAGEMENT ROUTES (Authenticated) ==========
+
 @api_router.post("/employees", response_model=Employee)
-async def create_employee(employee_data: EmployeeCreate):
+async def create_employee(
+    employee_data: EmployeeCreate,
+    current_user: User = Depends(get_current_user)
+):
     """Create a new employee record"""
     try:
-        employee = Employee(**employee_data.dict())
+        # Check if user has active subscription and employee limit
+        if current_user.employee_count > 0:
+            current_employees = await db.employees.count_documents({"user_id": current_user.id})
+            if current_employees >= current_user.employee_count:
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail=f"Employee limit reached. Current plan allows {current_user.employee_count} employees. Please upgrade your subscription."
+                )
+        
+        employee_dict = employee_data.dict()
+        employee_dict['user_id'] = current_user.id  # Associate with current user
+        employee = Employee(**employee_dict)
+        
         await db.employees.insert_one(employee.dict())
         
-        logger.info(f"Created employee: {employee.first_name} {employee.last_name}")
+        logger.info(f"Created employee: {employee.first_name} {employee.last_name} for user {current_user.email}")
         return employee
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating employee: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.get("/employees", response_model=List[Employee])
-async def get_employees():
-    """Get all employees"""
+async def get_employees(current_user: User = Depends(get_current_user)):
+    """Get all employees for current user"""
     try:
-        employees = await db.employees.find().to_list(1000)
+        employees = await db.employees.find({"user_id": current_user.id}).to_list(1000)
         return [Employee(**emp) for emp in employees]
     except Exception as e:
         logger.error(f"Error fetching employees: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/employees/{employee_id}", response_model=Employee)
-async def get_employee(employee_id: str):
+async def get_employee(employee_id: str, current_user: User = Depends(get_current_user)):
     """Get a specific employee"""
     try:
-        employee = await db.employees.find_one({"id": employee_id})
+        employee = await db.employees.find_one({"id": employee_id, "user_id": current_user.id})
         if not employee:
             raise HTTPException(status_code=404, detail="Employee not found")
         return Employee(**employee)
@@ -978,11 +997,22 @@ async def get_employee(employee_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/employees/{employee_id}/verify")
-async def verify_employee(employee_id: str, verification_types: List[VerificationType]):
+async def verify_employee(
+    employee_id: str, 
+    verification_types: List[VerificationType],
+    current_user: User = Depends(get_current_user)
+):
     """Run verification checks for an employee"""
     try:
-        # Get employee
-        employee_data = await db.employees.find_one({"id": employee_id})
+        # Check if user has active subscription
+        if not current_user.current_plan:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail="Active subscription required to perform verifications"
+            )
+        
+        # Get employee (ensure it belongs to current user)
+        employee_data = await db.employees.find_one({"id": employee_id, "user_id": current_user.id})
         if not employee_data:
             raise HTTPException(status_code=404, detail="Employee not found")
         
@@ -1017,20 +1047,58 @@ async def verify_employee(employee_id: str, verification_types: List[Verificatio
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/employees/{employee_id}/verification-results")
-async def get_employee_verification_results(employee_id: str):
+async def get_employee_verification_results(
+    employee_id: str, 
+    current_user: User = Depends(get_current_user)
+):
     """Get all verification results for an employee"""
     try:
+        # Verify employee belongs to current user
+        employee = await db.employees.find_one({"id": employee_id, "user_id": current_user.id})
+        if not employee:
+            raise HTTPException(status_code=404, detail="Employee not found")
+        
         results = await db.verification_results.find({"employee_id": employee_id}).to_list(1000)
         return [VerificationResult(**result) for result in results]
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching verification results for employee {employee_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/verify-batch")
-async def verify_batch(request: BatchVerificationRequest, background_tasks: BackgroundTasks):
+async def verify_batch(
+    request: BatchVerificationRequest, 
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user)
+):
     """Run batch verification for multiple employees"""
     try:
-        background_tasks.add_task(process_batch_verification, request.employee_ids, request.verification_types)
+        # Check if user has active subscription
+        if not current_user.current_plan:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail="Active subscription required to perform verifications"
+            )
+        
+        # Verify all employees belong to current user
+        employee_count = await db.employees.count_documents({
+            "id": {"$in": request.employee_ids},
+            "user_id": current_user.id
+        })
+        
+        if employee_count != len(request.employee_ids):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Some employees do not belong to your account"
+            )
+        
+        background_tasks.add_task(
+            process_batch_verification_authenticated, 
+            request.employee_ids, 
+            request.verification_types,
+            current_user.id
+        )
         
         return {
             "message": "Batch verification started",
@@ -1038,15 +1106,21 @@ async def verify_batch(request: BatchVerificationRequest, background_tasks: Back
             "verification_types": request.verification_types,
             "status": "processing"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error starting batch verification: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-async def process_batch_verification(employee_ids: List[str], verification_types: List[VerificationType]):
-    """Background task to process batch verification"""
+async def process_batch_verification_authenticated(
+    employee_ids: List[str], 
+    verification_types: List[VerificationType],
+    user_id: str
+):
+    """Background task to process batch verification for authenticated user"""
     try:
         for employee_id in employee_ids:
-            employee_data = await db.employees.find_one({"id": employee_id})
+            employee_data = await db.employees.find_one({"id": employee_id, "user_id": user_id})
             if employee_data:
                 employee = Employee(**employee_data)
                 
@@ -1059,26 +1133,48 @@ async def process_batch_verification(employee_ids: List[str], verification_types
                     # Add small delay to prevent overwhelming external APIs
                     await asyncio.sleep(0.1)
         
-        logger.info(f"Completed batch verification for {len(employee_ids)} employees")
+        logger.info(f"Completed batch verification for {len(employee_ids)} employees (user: {user_id})")
     except Exception as e:
         logger.error(f"Error in batch verification: {e}")
 
 @api_router.get("/verification-results")
-async def get_all_verification_results():
-    """Get all verification results"""
+async def get_all_verification_results(current_user: User = Depends(get_current_user)):
+    """Get all verification results for current user's employees"""
     try:
-        results = await db.verification_results.find().sort("checked_at", -1).to_list(1000)
+        # Get employee IDs for current user
+        employees = await db.employees.find({"user_id": current_user.id}, {"id": 1}).to_list(1000)
+        employee_ids = [emp["id"] for emp in employees]
+        
+        if not employee_ids:
+            return []
+        
+        results = await db.verification_results.find({
+            "employee_id": {"$in": employee_ids}
+        }).sort("checked_at", -1).to_list(1000)
+        
         return [VerificationResult(**result) for result in results]
     except Exception as e:
         logger.error(f"Error fetching verification results: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/verification-results/summary")
-async def get_verification_summary():
-    """Get verification results summary/statistics"""
+async def get_verification_summary(current_user: User = Depends(get_current_user)):
+    """Get verification results summary/statistics for current user"""
     try:
+        # Get employee IDs for current user
+        employees = await db.employees.find({"user_id": current_user.id}, {"id": 1}).to_list(1000)
+        employee_ids = [emp["id"] for emp in employees]
+        
+        if not employee_ids:
+            return {
+                "total_checks": 0,
+                "by_status": {},
+                "by_type": {}
+            }
+        
         # Get counts by status
         pipeline = [
+            {"$match": {"employee_id": {"$in": employee_ids}}},
             {
                 "$group": {
                     "_id": {"status": "$status", "verification_type": "$verification_type"},
@@ -1089,8 +1185,12 @@ async def get_verification_summary():
         
         results = await db.verification_results.aggregate(pipeline).to_list(100)
         
+        total_results = await db.verification_results.find({
+            "employee_id": {"$in": employee_ids}
+        }).to_list(10000)
+        
         summary = {
-            "total_checks": len(await db.verification_results.find().to_list(10000)),
+            "total_checks": len(total_results),
             "by_status": {},
             "by_type": {}
         }
