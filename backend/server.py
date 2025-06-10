@@ -537,9 +537,408 @@ async def check_sam_exclusion(employee: Employee) -> VerificationResult:
         return error_result
 
 # API Routes
+
+# ========== PUBLIC ROUTES (No Authentication Required) ==========
+
 @api_router.get("/")
 async def root():
     return {"message": "Health Verify Now API", "version": "1.0.0", "status": "active"}
+
+@api_router.get("/pricing")
+async def get_pricing():
+    """Get pricing tiers"""
+    return {"pricing_tiers": get_pricing_tiers()}
+
+# ========== AUTHENTICATION ROUTES ==========
+
+@api_router.post("/auth/register", response_model=Token)
+async def register(user_data: UserCreate):
+    """Register a new user"""
+    try:
+        # Check if user already exists
+        existing_user = await db.users.find_one({"email": user_data.email})
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
+        
+        # Hash password and create user
+        hashed_password = get_password_hash(user_data.password)
+        user_dict = user_data.dict()
+        del user_dict['password']
+        
+        user = User(**user_dict)
+        user_doc = user.dict()
+        user_doc['hashed_password'] = hashed_password
+        
+        await db.users.insert_one(user_doc)
+        
+        # Create access token
+        access_token = create_access_token(data={"sub": user.email})
+        
+        logger.info(f"New user registered: {user.email}")
+        
+        return Token(
+            access_token=access_token,
+            user=UserResponse(**user.dict())
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error during registration: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Registration failed"
+        )
+
+@api_router.post("/auth/login", response_model=Token)
+async def login(user_data: UserLogin):
+    """Login user"""
+    try:
+        # Find user
+        user_doc = await db.users.find_one({"email": user_data.email})
+        if not user_doc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password"
+            )
+        
+        # Verify password
+        if not verify_password(user_data.password, user_doc['hashed_password']):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password"
+            )
+        
+        # Check if user is active
+        if not user_doc.get('is_active', True):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Account is deactivated"
+            )
+        
+        # Create access token
+        access_token = create_access_token(data={"sub": user_doc['email']})
+        
+        user = User(**user_doc)
+        
+        logger.info(f"User logged in: {user.email}")
+        
+        return Token(
+            access_token=access_token,
+            user=UserResponse(**user.dict())
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error during login: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Login failed"
+        )
+
+@api_router.get("/auth/me", response_model=UserResponse)
+async def get_current_user_info(current_user: User = Depends(get_current_user)):
+    """Get current user information"""
+    return UserResponse(**current_user.dict())
+
+# ========== PAYMENT ROUTES ==========
+
+@api_router.post("/payment/create-subscription")
+async def create_subscription(
+    subscription_data: SubscriptionCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Create PayPal subscription for user"""
+    try:
+        # Calculate pricing
+        plan_name, monthly_cost = calculate_monthly_cost(subscription_data.employee_count)
+        
+        # Check if user already has an active subscription
+        existing_subscription = await db.subscriptions.find_one({
+            "user_id": current_user.id,
+            "status": "active"
+        })
+        
+        if existing_subscription:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User already has an active subscription"
+            )
+        
+        # Create PayPal product (if not exists)
+        try:
+            product_id = await paypal_client.create_product(
+                name="Health Verify Now - Healthcare Compliance Verification",
+                description="Monthly subscription for OIG and healthcare compliance verification services"
+            )
+        except Exception as e:
+            logger.error(f"Error creating PayPal product: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create subscription product"
+            )
+        
+        # Create PayPal subscription plan
+        try:
+            plan_id = await paypal_client.create_subscription_plan(
+                product_id=product_id,
+                plan_name=plan_name,
+                price_per_employee=monthly_cost / subscription_data.employee_count
+            )
+        except Exception as e:
+            logger.error(f"Error creating PayPal plan: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create subscription plan"
+            )
+        
+        # Create PayPal subscription
+        try:
+            paypal_subscription = await paypal_client.create_subscription(
+                plan_id=plan_id,
+                employee_count=subscription_data.employee_count,
+                monthly_cost=monthly_cost,
+                user_email=current_user.email
+            )
+        except Exception as e:
+            logger.error(f"Error creating PayPal subscription: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create subscription"
+            )
+        
+        # Save subscription to database
+        subscription = Subscription(
+            user_id=current_user.id,
+            paypal_subscription_id=paypal_subscription['subscription_id'],
+            plan_name=plan_name,
+            employee_count=subscription_data.employee_count,
+            monthly_cost=monthly_cost,
+            status=paypal_subscription['status'],
+            next_billing_date=datetime.utcnow() + timedelta(days=30)
+        )
+        
+        await db.subscriptions.insert_one(subscription.dict())
+        
+        # Update user with subscription info
+        await db.users.update_one(
+            {"id": current_user.id},
+            {
+                "$set": {
+                    "paypal_subscription_id": paypal_subscription['subscription_id'],
+                    "current_plan": plan_name,
+                    "employee_count": subscription_data.employee_count,
+                    "monthly_cost": monthly_cost,
+                    "next_billing_date": subscription.next_billing_date,
+                    "updated_at": datetime.utcnow()
+                }
+            }
+        )
+        
+        logger.info(f"Subscription created for user {current_user.email}: {plan_name}, {subscription_data.employee_count} employees, ${monthly_cost}/month")
+        
+        return {
+            "subscription_id": subscription.id,
+            "paypal_subscription_id": paypal_subscription['subscription_id'],
+            "approval_url": paypal_subscription['approval_url'],
+            "plan_name": plan_name,
+            "employee_count": subscription_data.employee_count,
+            "monthly_cost": monthly_cost,
+            "status": paypal_subscription['status']
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating subscription: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create subscription"
+        )
+
+@api_router.get("/payment/subscription")
+async def get_user_subscription(current_user: User = Depends(get_current_user)):
+    """Get user's current subscription"""
+    try:
+        subscription = await db.subscriptions.find_one({
+            "user_id": current_user.id,
+            "status": {"$in": ["active", "pending"]}
+        })
+        
+        if not subscription:
+            return {"subscription": None}
+        
+        # Get latest PayPal subscription status
+        try:
+            paypal_sub = await paypal_client.get_subscription(subscription['paypal_subscription_id'])
+            if paypal_sub:
+                # Update local status if different
+                if paypal_sub.get('status') != subscription['status']:
+                    await db.subscriptions.update_one(
+                        {"id": subscription['id']},
+                        {"$set": {"status": paypal_sub.get('status'), "updated_at": datetime.utcnow()}}
+                    )
+                    subscription['status'] = paypal_sub.get('status')
+        except Exception as e:
+            logger.warning(f"Could not get PayPal subscription status: {e}")
+        
+        return {
+            "subscription": Subscription(**subscription)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting user subscription: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get subscription"
+        )
+
+@api_router.patch("/payment/subscription")
+async def update_subscription(
+    subscription_update: SubscriptionUpdate,
+    current_user: User = Depends(get_current_user)
+):
+    """Update user's subscription (change employee count)"""
+    try:
+        # Get current subscription
+        subscription = await db.subscriptions.find_one({
+            "user_id": current_user.id,
+            "status": "active"
+        })
+        
+        if not subscription:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active subscription found"
+            )
+        
+        # Calculate new pricing
+        new_plan_name, new_monthly_cost = calculate_monthly_cost(subscription_update.employee_count)
+        
+        # Update PayPal subscription quantity
+        success = await paypal_client.update_subscription_quantity(
+            subscription['paypal_subscription_id'],
+            subscription_update.employee_count
+        )
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update PayPal subscription"
+            )
+        
+        # Update local subscription
+        await db.subscriptions.update_one(
+            {"id": subscription['id']},
+            {
+                "$set": {
+                    "employee_count": subscription_update.employee_count,
+                    "monthly_cost": new_monthly_cost,
+                    "plan_name": new_plan_name,
+                    "updated_at": datetime.utcnow()
+                }
+            }
+        )
+        
+        # Update user
+        await db.users.update_one(
+            {"id": current_user.id},
+            {
+                "$set": {
+                    "employee_count": subscription_update.employee_count,
+                    "monthly_cost": new_monthly_cost,
+                    "current_plan": new_plan_name,
+                    "updated_at": datetime.utcnow()
+                }
+            }
+        )
+        
+        logger.info(f"Subscription updated for user {current_user.email}: {new_plan_name}, {subscription_update.employee_count} employees, ${new_monthly_cost}/month")
+        
+        return {
+            "plan_name": new_plan_name,
+            "employee_count": subscription_update.employee_count,
+            "monthly_cost": new_monthly_cost,
+            "message": "Subscription updated successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating subscription: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update subscription"
+        )
+
+@api_router.delete("/payment/subscription")
+async def cancel_subscription(current_user: User = Depends(get_current_user)):
+    """Cancel user's subscription"""
+    try:
+        # Get current subscription
+        subscription = await db.subscriptions.find_one({
+            "user_id": current_user.id,
+            "status": "active"
+        })
+        
+        if not subscription:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active subscription found"
+            )
+        
+        # Cancel PayPal subscription
+        success = await paypal_client.cancel_subscription(
+            subscription['paypal_subscription_id'],
+            "Customer requested cancellation"
+        )
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to cancel PayPal subscription"
+            )
+        
+        # Update local subscription status
+        await db.subscriptions.update_one(
+            {"id": subscription['id']},
+            {
+                "$set": {
+                    "status": "cancelled",
+                    "updated_at": datetime.utcnow()
+                }
+            }
+        )
+        
+        # Update user
+        await db.users.update_one(
+            {"id": current_user.id},
+            {
+                "$set": {
+                    "current_plan": None,
+                    "employee_count": 0,
+                    "monthly_cost": 0.0,
+                    "updated_at": datetime.utcnow()
+                }
+            }
+        )
+        
+        logger.info(f"Subscription cancelled for user {current_user.email}")
+        
+        return {"message": "Subscription cancelled successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error cancelling subscription: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to cancel subscription"
+        )
 
 @api_router.post("/employees", response_model=Employee)
 async def create_employee(employee_data: EmployeeCreate):
