@@ -49,7 +49,10 @@ const EmployeeForm = ({ onEmployeeAdded }) => {
       alert('Employee added successfully!');
     } catch (error) {
       console.error('Error adding employee:', error);
-      alert('Error adding employee: ' + error.response?.data?.detail || error.message);
+      if (error.response?.status === 402) {
+        alert('Employee limit reached! Please upgrade your subscription to add more employees.');
+      } else {
+        alert('Error adding employee: ' + (error.response?.data?.detail || error.message));
     } finally {
       setIsSubmitting(false);
     }
