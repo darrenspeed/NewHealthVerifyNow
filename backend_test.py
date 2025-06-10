@@ -152,21 +152,21 @@ def main():
     
     # Test creating employees specifically for SAM verification
     print("\n=== Testing Employee Creation for SAM Verification ===")
-    # Test with a normal name
-    alice_id = tester.test_create_employee("Alice", "Johnson")
+    # Test with a normal name as requested
+    test_employee_id = tester.test_create_employee("Test", "Employee")
     
-    # Test with a common name that might have more potential matches
-    john_id = tester.test_create_employee("John", "Smith")
+    # Test SAM verification with the updated API endpoint and key
+    print("\n=== Testing SAM Verification with Updated API Endpoint and Key ===")
+    print("API Endpoint: https://api.sam.gov/prod/api/v1/exclusions")
+    print("API Key: l43DgBt7jj7fuKwpOI90jKMX8MsXSgrTKMPgfqI2")
     
-    # Test SAM verification with the updated API key
-    print("\n=== Testing SAM Verification with Updated API Key ===")
-    if alice_id:
-        print("\n--- Testing SAM verification for Alice Johnson ---")
-        success, alice_results = tester.test_verify_employee(alice_id, ["sam"])
+    if test_employee_id:
+        print("\n--- Testing SAM verification for Test Employee ---")
+        success, test_results = tester.test_verify_employee(test_employee_id, ["sam"])
         
         # Check if the verification was successful (not an error)
         if success:
-            for result in alice_results.get('results', []):
+            for result in test_results.get('results', []):
                 if result.get('verification_type') == 'sam':
                     status = result.get('status')
                     if status == 'error':
@@ -174,24 +174,18 @@ def main():
                         print(f"Error message: {result.get('error_message')}")
                     else:
                         print(f"✅ SAM verification completed with status: {status}")
-                        print(f"This indicates the API key is working correctly!")
-    
-    # Test with a common name (more likely to have potential matches)
-    if john_id:
-        print("\n--- Testing SAM verification for John Smith ---")
-        success, john_results = tester.test_verify_employee(john_id, ["sam"])
-        
-        # Check if the verification was successful (not an error)
-        if success:
-            for result in john_results.get('results', []):
-                if result.get('verification_type') == 'sam':
-                    status = result.get('status')
-                    if status == 'error':
-                        print("❌ SAM verification failed with error status")
-                        print(f"Error message: {result.get('error_message')}")
-                    else:
-                        print(f"✅ SAM verification completed with status: {status}")
-                        print(f"This indicates the API key is working correctly!")
+                        print(f"This indicates the API endpoint and key are working correctly!")
+                        
+                    # Check API response details if available
+                    api_response = result.get('results', {}).get('api_response_summary', {})
+                    if api_response:
+                        status_code = api_response.get('status_code')
+                        print(f"   API Status Code: {status_code}")
+                        if status_code == 200:
+                            print("   ✅ SAM API returned successful status code 200")
+                            print("   ✅ The updated API endpoint is working correctly!")
+                        else:
+                            print(f"   ❌ SAM API returned non-200 status code: {status_code}")
     
     # Wait a bit for any background tasks to complete
     print("\nWaiting for background tasks to complete...")
@@ -232,9 +226,9 @@ def main():
         if not sam_results_found:
             print("❌ No SAM verification results were found")
         elif not sam_errors_found:
-            print("✅ No SAM API errors were found - the API key appears to be working correctly!")
+            print("✅ No SAM API errors were found - the API endpoint and key are working correctly!")
         else:
-            print("❌ SAM API errors were found - the API key may not be working correctly")
+            print("❌ SAM API errors were found - the API endpoint or key may not be working correctly")
     
     # Print results
     print(f"\n📊 Tests passed: {tester.tests_passed}/{tester.tests_run}")
