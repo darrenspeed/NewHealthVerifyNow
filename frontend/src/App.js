@@ -451,7 +451,7 @@ const VerificationResults = ({ results }) => {
   );
 };
 
-const Dashboard = () => {
+const Dashboard = ({ user }) => {
   const [summary, setSummary] = useState(null);
 
   useEffect(() => {
@@ -487,8 +487,9 @@ const Dashboard = () => {
       </div>
       
       <div className="bg-white rounded-lg shadow-md p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-2">Pending</h3>
-        <p className="text-3xl font-bold text-yellow-600">{summary.by_status?.pending || 0}</p>
+        <h3 className="text-lg font-semibold text-gray-800 mb-2">Current Plan</h3>
+        <p className="text-xl font-bold text-purple-600">{user?.current_plan || 'None'}</p>
+        <p className="text-sm text-gray-500">{user?.employee_count || 0} employees</p>
       </div>
     </div>
   );
