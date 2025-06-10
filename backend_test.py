@@ -9,11 +9,18 @@ class HealthVerifyTester:
         self.tests_run = 0
         self.tests_passed = 0
         self.created_employees = []
+        self.auth_token = None
+        self.user_data = None
+        self.subscription_data = None
 
-    def run_test(self, name, method, endpoint, expected_status, data=None, params=None):
+    def run_test(self, name, method, endpoint, expected_status, data=None, params=None, auth=False):
         """Run a single API test"""
         url = f"{self.base_url}/{endpoint}"
         headers = {'Content-Type': 'application/json'}
+        
+        # Add authorization header if needed and token is available
+        if auth and self.auth_token:
+            headers['Authorization'] = f'Bearer {self.auth_token}'
         
         self.tests_run += 1
         print(f"\n🔍 Testing {name}...")
@@ -25,6 +32,8 @@ class HealthVerifyTester:
                 response = requests.post(url, json=data, headers=headers)
             elif method == 'PUT':
                 response = requests.put(url, json=data, headers=headers)
+            elif method == 'PATCH':
+                response = requests.patch(url, json=data, headers=headers)
             elif method == 'DELETE':
                 response = requests.delete(url, headers=headers)
 
