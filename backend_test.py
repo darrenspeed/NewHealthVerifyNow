@@ -233,7 +233,8 @@ class HealthVerifyTester:
             "POST",
             "api/employees",
             200 if should_pass else 400,
-            data=employee_data
+            data=employee_data,
+            auth=True
         )
         
         if success and should_pass:
@@ -248,7 +249,8 @@ class HealthVerifyTester:
             "Get All Employees",
             "GET",
             "api/employees",
-            200
+            200,
+            auth=True
         )
         if success:
             print(f"Retrieved {len(response)} employees")
@@ -261,7 +263,8 @@ class HealthVerifyTester:
             "POST",
             f"api/employees/{employee_id}/verify",
             200,
-            data=verification_types
+            data=verification_types,
+            auth=True
         )
         if success:
             print(f"Verification results: {json.dumps(response, indent=2)}")
@@ -279,7 +282,8 @@ class HealthVerifyTester:
             "POST",
             "api/verify-batch",
             200,
-            data=data
+            data=data,
+            auth=True
         )
         if success:
             print(f"Batch verification started for {len(employee_ids)} employees")
@@ -291,7 +295,8 @@ class HealthVerifyTester:
             "Get Verification Results",
             "GET",
             "api/verification-results",
-            200
+            200,
+            auth=True
         )
         if success:
             print(f"Retrieved {len(response)} verification results")
@@ -303,7 +308,8 @@ class HealthVerifyTester:
             f"Get Verification Results for Employee {employee_id}",
             "GET",
             f"api/employees/{employee_id}/verification-results",
-            200
+            200,
+            auth=True
         )
         if success:
             print(f"Retrieved {len(response)} verification results for employee {employee_id}")
