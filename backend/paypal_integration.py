@@ -12,8 +12,9 @@ class PayPalClient:
     def __init__(self):
         self.client_id = os.environ.get("PAYPAL_CLIENT_ID")
         self.client_secret = os.environ.get("PAYPAL_CLIENT_SECRET")
-        self.base_url = "https://api-m.sandbox.paypal.com"  # Use sandbox for testing
-        # self.base_url = "https://api-m.paypal.com"  # Use this for production
+        # PRODUCTION URLs for live payments
+        self.base_url = "https://api-m.paypal.com"  # LIVE PRODUCTION
+        # self.base_url = "https://api-m.sandbox.paypal.com"  # Sandbox for testing
         self.access_token = None
         self.token_expires_at = None
 
