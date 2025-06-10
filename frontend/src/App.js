@@ -400,7 +400,35 @@ const VerificationResults = ({ results }) => {
                   </span>
                 </td>
                 <td className="px-4 py-2 text-sm text-gray-900">
-                  {result.results?.message || result.results?.match_details || 'No details available'}
+                  {result.results?.message ? (
+                    result.results.message
+                  ) : result.results?.match_details ? (
+                    <div>
+                      {result.results.excluded ? (
+                        <div className="text-red-600 font-semibold">Exclusion Found</div>
+                      ) : (
+                        <div className="text-green-600 font-semibold">No Exclusion Found</div>
+                      )}
+                      {Array.isArray(result.results.match_details) && result.results.match_details.length > 0 ? (
+                        <div className="mt-1">
+                          <div className="font-semibold">Match Details:</div>
+                          {result.results.match_details.map((match, idx) => (
+                            <div key={idx} className="mt-1 border-t border-gray-200 pt-1">
+                              <div>Name: {match.name}</div>
+                              {match.exclusion_type && <div>Type: {match.exclusion_type}</div>}
+                              {match.exclusion_date && <div>Date: {match.exclusion_date}</div>}
+                              {match.address && <div>Address: {match.address}</div>}
+                              {match.match_score && <div>Score: {match.match_score}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div>No match details available</div>
+                      )}
+                    </div>
+                  ) : (
+                    'No details available'
+                  )}
                   {result.error_message && (
                     <div className="text-red-600 text-xs mt-1">{result.error_message}</div>
                   )}
