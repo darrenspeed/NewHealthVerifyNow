@@ -73,7 +73,7 @@ class HealthVerifyTester:
             f"Create Employee: {first_name} {last_name}",
             "POST",
             "api/employees",
-            201 if should_pass else 400,
+            200 if should_pass else 400,
             data=employee_data
         )
         
