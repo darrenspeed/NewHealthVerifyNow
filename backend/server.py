@@ -681,8 +681,15 @@ app.add_middleware(
 async def startup_event():
     """Initialize the application"""
     logger.info("Health Verify Now API starting up...")
-    # You could download OIG data on startup
-    # await download_oig_data()
+    
+    # Download and load OIG data on startup
+    logger.info("Initializing OIG exclusion database...")
+    if await load_oig_data_to_memory():
+        logger.info("✅ OIG exclusion database loaded successfully")
+    else:
+        logger.warning("⚠️ Failed to load OIG exclusion database - will attempt download on first check")
+    
+    logger.info("🚀 Health Verify Now API ready for commercial use!")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
