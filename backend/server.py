@@ -1,4 +1,5 @@
-from fastapi import FastAPI, APIRouter, HTTPException, BackgroundTasks
+from fastapi import FastAPI, APIRouter, HTTPException, BackgroundTasks, Depends, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -16,6 +17,18 @@ import asyncio
 from enum import Enum
 import aiofiles
 import hashlib
+
+# Import authentication and payment modules
+from auth_models import (
+    User, UserCreate, UserLogin, UserResponse, Token,
+    Subscription, SubscriptionCreate, SubscriptionUpdate,
+    PayPalCreateOrder, PayPalOrderResponse, PayPalCaptureOrder
+)
+from auth_utils import (
+    verify_password, get_password_hash, create_access_token, verify_token,
+    calculate_monthly_cost, get_pricing_tiers
+)
+from paypal_integration import paypal_client
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
