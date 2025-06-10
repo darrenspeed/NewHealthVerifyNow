@@ -66,6 +66,155 @@ class HealthVerifyTester:
             print(f"API Version: {response.get('version')}")
             print(f"API Status: {response.get('status')}")
         return success
+    
+    # Authentication Tests
+    def test_register(self, email, password, company_name, first_name, last_name):
+        """Test user registration"""
+        user_data = {
+            "email": email,
+            "password": password,
+            "company_name": company_name,
+            "first_name": first_name,
+            "last_name": last_name
+        }
+        
+        success, response = self.run_test(
+            f"Register User: {email}",
+            "POST",
+            "api/auth/register",
+            200,
+            data=user_data
+        )
+        
+        if success and response.get('access_token'):
+            self.auth_token = response.get('access_token')
+            self.user_data = response.get('user')
+            print(f"Registered user with email: {email}")
+            print(f"Auth token received: {self.auth_token[:10]}...")
+        return success, response
+    
+    def test_login(self, email, password):
+        """Test user login"""
+        login_data = {
+            "email": email,
+            "password": password
+        }
+        
+        success, response = self.run_test(
+            f"Login User: {email}",
+            "POST",
+            "api/auth/login",
+            200,
+            data=login_data
+        )
+        
+        if success and response.get('access_token'):
+            self.auth_token = response.get('access_token')
+            self.user_data = response.get('user')
+            print(f"Logged in user with email: {email}")
+            print(f"Auth token received: {self.auth_token[:10]}...")
+        return success, response
+    
+    def test_get_current_user(self):
+        """Test getting current user info"""
+        success, response = self.run_test(
+            "Get Current User Info",
+            "GET",
+            "api/auth/me",
+            200,
+            auth=True
+        )
+        
+        if success:
+            print(f"Retrieved user info: {response.get('email')}")
+            print(f"Company: {response.get('company_name')}")
+            if response.get('current_plan'):
+                print(f"Current plan: {response.get('current_plan')}")
+                print(f"Employee count: {response.get('employee_count')}")
+                print(f"Monthly cost: ${response.get('monthly_cost')}")
+        return success, response
+    
+    # Payment Tests
+    def test_get_pricing(self):
+        """Test getting pricing information"""
+        success, response = self.run_test(
+            "Get Pricing Information",
+            "GET",
+            "api/pricing",
+            200
+        )
+        
+        if success and response.get('pricing_tiers'):
+            print(f"Retrieved {len(response.get('pricing_tiers'))} pricing tiers:")
+            for tier in response.get('pricing_tiers'):
+                print(f"  - {tier.get('name')}: ${tier.get('price_per_employee')}/employee/month")
+                print(f"    Min: {tier.get('min_employees')} employees, Max: {tier.get('max_employees') or 'Unlimited'}")
+        return success, response
+    
+    def test_create_subscription(self, employee_count):
+        """Test creating a subscription"""
+        subscription_data = {
+            "employee_count": employee_count
+        }
+        
+        success, response = self.run_test(
+            f"Create Subscription for {employee_count} employees",
+            "POST",
+            "api/payment/create-subscription",
+            200,
+            data=subscription_data,
+            auth=True
+        )
+        
+        if success:
+            self.subscription_data = response
+            print(f"Created subscription with ID: {response.get('subscription_id')}")
+            print(f"PayPal subscription ID: {response.get('paypal_subscription_id')}")
+            print(f"Plan: {response.get('plan_name')}")
+            print(f"Monthly cost: ${response.get('monthly_cost')}")
+            print(f"Status: {response.get('status')}")
+            print(f"Approval URL: {response.get('approval_url')}")
+        return success, response
+    
+    def test_get_subscription(self):
+        """Test getting current subscription"""
+        success, response = self.run_test(
+            "Get Current Subscription",
+            "GET",
+            "api/payment/subscription",
+            200,
+            auth=True
+        )
+        
+        if success and response.get('subscription'):
+            subscription = response.get('subscription')
+            print(f"Retrieved subscription: {subscription.get('id')}")
+            print(f"Plan: {subscription.get('plan_name')}")
+            print(f"Employee count: {subscription.get('employee_count')}")
+            print(f"Monthly cost: ${subscription.get('monthly_cost')}")
+            print(f"Status: {subscription.get('status')}")
+        return success, response
+    
+    def test_update_subscription(self, new_employee_count):
+        """Test updating subscription employee count"""
+        update_data = {
+            "employee_count": new_employee_count
+        }
+        
+        success, response = self.run_test(
+            f"Update Subscription to {new_employee_count} employees",
+            "PATCH",
+            "api/payment/subscription",
+            200,
+            data=update_data,
+            auth=True
+        )
+        
+        if success:
+            print(f"Updated subscription to {new_employee_count} employees")
+            print(f"New plan: {response.get('plan_name')}")
+            print(f"New monthly cost: ${response.get('monthly_cost')}")
+        return success, response
 
     def test_create_employee(self, first_name, last_name, middle_name=None, should_pass=True):
         """Test creating an employee"""
