@@ -674,34 +674,59 @@ async def create_subscription(
                 detail="User already has an active subscription"
             )
         
-        # Create PayPal product (if not exists) - Use simpler approach
+        # Create PayPal product and subscription - LIVE INTEGRATION
         try:
-            # For now, let's skip product creation and use a static product ID
-            # In production, you'd create the product once and reuse the ID
-            logger.info("Skipping PayPal product creation for MVP - using direct subscription creation")
+            # Create PayPal product for subscriptions
+            product_id = await paypal_client.create_product(
+                name="Health Verify Now - Healthcare Compliance Verification",
+                description="Monthly subscription for OIG and healthcare compliance verification services"
+            )
             
+            logger.info(f"Created PayPal product: {product_id}")
+            
+        except Exception as e:
+            logger.error(f"Error creating PayPal product: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create subscription product"
+            )
+        
+        # Create PayPal subscription plan
+        try:
             # Calculate pricing per employee
             price_per_employee = monthly_cost / subscription_data.employee_count
             
-            # Create a simplified subscription without complex product setup
-            # For MVP, we'll simulate the subscription creation process
-            import uuid
-            mock_subscription_id = f"I-{str(uuid.uuid4())[:8].upper()}"
-            mock_approval_url = f"https://www.sandbox.paypal.com/checkoutnow?token=MOCK-{str(uuid.uuid4())[:8]}"
+            plan_id = await paypal_client.create_subscription_plan(
+                product_id=product_id,
+                plan_name=plan_name,
+                price_per_employee=price_per_employee
+            )
             
-            paypal_subscription = {
-                'subscription_id': mock_subscription_id,
-                'approval_url': mock_approval_url,
-                'status': 'APPROVAL_PENDING'
-            }
-            
-            logger.info(f"Created mock PayPal subscription for MVP: {mock_subscription_id}")
+            logger.info(f"Created PayPal plan: {plan_id}")
             
         except Exception as e:
-            logger.error(f"Error with PayPal integration: {e}")
+            logger.error(f"Error creating PayPal plan: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="PayPal integration temporarily unavailable - using mock subscription for testing"
+                detail="Failed to create subscription plan"
+            )
+        
+        # Create PayPal subscription
+        try:
+            paypal_subscription = await paypal_client.create_subscription(
+                plan_id=plan_id,
+                employee_count=subscription_data.employee_count,
+                monthly_cost=monthly_cost,
+                user_email=current_user.email
+            )
+            
+            logger.info(f"Created PayPal subscription: {paypal_subscription['subscription_id']}")
+            
+        except Exception as e:
+            logger.error(f"Error creating PayPal subscription: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create subscription"
             )
         
         # Save subscription to database
