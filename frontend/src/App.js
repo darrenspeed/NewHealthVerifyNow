@@ -53,6 +53,7 @@ const EmployeeForm = ({ onEmployeeAdded }) => {
         alert('Employee limit reached! Please upgrade your subscription to add more employees.');
       } else {
         alert('Error adding employee: ' + (error.response?.data?.detail || error.message));
+      }
     } finally {
       setIsSubmitting(false);
     }
