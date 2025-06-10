@@ -167,8 +167,8 @@ class PayPalClient:
                     "payer_selected": "PAYPAL",
                     "payee_preferred": "IMMEDIATE_PAYMENT_REQUIRED"
                 },
-                "return_url": "https://your-domain.com/subscription/success",
-                "cancel_url": "https://your-domain.com/subscription/cancel"
+                "return_url": "https://www.healthverifynow.com/subscription/success",
+                "cancel_url": "https://www.healthverifynow.com/subscription/cancel"
             }
         }
 
