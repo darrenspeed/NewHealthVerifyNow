@@ -17,6 +17,10 @@ import asyncio
 from enum import Enum
 import aiofiles
 import hashlib
+import sys
+
+# Add current directory to Python path
+sys.path.append(str(Path(__file__).parent))
 
 # Import authentication and payment modules
 from auth_models import (
