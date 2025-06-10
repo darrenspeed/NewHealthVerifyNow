@@ -327,6 +327,51 @@ def main():
         print("❌ API root test failed, stopping tests")
         return 1
     
+    # Test pricing information
+    print("\n=== Testing Pricing Information ===")
+    tester.test_get_pricing()
+    
+    # Test user registration
+    print("\n=== Testing User Registration ===")
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    test_email = f"test{timestamp}@example.com"
+    test_password = "test123"
+    test_company = "Test Healthcare"
+    
+    success, _ = tester.test_register(
+        email=test_email,
+        password=test_password,
+        company_name=test_company,
+        first_name="Test",
+        last_name="User"
+    )
+    
+    if not success:
+        print("❌ Registration failed, trying login instead...")
+        # Try login with the test credentials
+        success, _ = tester.test_login(test_email, test_password)
+        if not success:
+            print("❌ Login failed, stopping tests")
+            return 1
+    
+    # Test getting current user info
+    print("\n=== Testing Current User Info ===")
+    tester.test_get_current_user()
+    
+    # Test creating a subscription
+    print("\n=== Testing Subscription Creation ===")
+    employee_count = 5
+    success, subscription = tester.test_create_subscription(employee_count)
+    
+    if success:
+        print("\n=== PayPal Subscription Created ===")
+        print(f"To complete the subscription, visit: {subscription.get('approval_url')}")
+        print("This would normally redirect the user to PayPal for payment approval")
+    
+    # Test getting current subscription
+    print("\n=== Testing Get Current Subscription ===")
+    tester.test_get_subscription()
+    
     # Test creating employees with common names that might be in the OIG database
     print("\n=== Testing Employee Creation with Common Names ===")
     
@@ -349,6 +394,10 @@ def main():
     clean_employee_id = tester.test_create_employee("Test", "Employee")
     if clean_employee_id:
         employee_ids.append(clean_employee_id)
+    
+    # Test getting all employees
+    print("\n=== Testing Get All Employees ===")
+    tester.test_get_employees()
     
     # Test OIG verification for each employee
     print("\n=== Testing OIG Verification with Real Data ===")
@@ -467,6 +516,12 @@ def main():
         if oig_results:
             db_size = oig_results[0].get('results', {}).get('database_info', {}).get('total_exclusions_in_database', 'Unknown')
             print(f"OIG Database Size: {db_size} exclusions")
+    
+    # Test updating subscription
+    if tester.subscription_data:
+        print("\n=== Testing Subscription Update ===")
+        new_employee_count = 10
+        tester.test_update_subscription(new_employee_count)
     
     # Print results
     print(f"\n📊 Tests passed: {tester.tests_passed}/{tester.tests_run}")
