@@ -494,15 +494,20 @@ const Dashboard = () => {
   );
 };
 
-const App = () => {
+const MainApp = () => {
   const [employees, setEmployees] = useState([]);
   const [verificationResults, setVerificationResults] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentView, setCurrentView] = useState('dashboard');
+
+  const { user, logout } = useAuth();
 
   useEffect(() => {
-    fetchEmployees();
-    fetchVerificationResults();
-  }, []);
+    if (user) {
+      fetchEmployees();
+      fetchVerificationResults();
+    }
+  }, [user]);
 
   const fetchEmployees = async () => {
     try {
@@ -538,8 +543,16 @@ const App = () => {
       }, 1000);
     } catch (error) {
       console.error('Error verifying employee:', error);
-      alert('Error starting verification');
+      if (error.response?.status === 402) {
+        alert('Active subscription required to perform verifications');
+      } else {
+        alert('Error starting verification');
+      }
     }
+  };
+
+  const handleLogout = () => {
+    logout();
   };
 
   if (loading) {
@@ -560,28 +573,116 @@ const App = () => {
                 <h1 className="text-3xl font-bold text-gray-900">Health Verify Now</h1>
               </div>
             </div>
+            
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-500">Healthcare Compliance Verification System</span>
+              <div className="flex items-center space-x-6">
+                <button
+                  onClick={() => setCurrentView('dashboard')}
+                  className={`text-sm font-medium ${currentView === 'dashboard' ? 'text-blue-600' : 'text-gray-600 hover:text-blue-600'}`}
+                >
+                  Dashboard
+                </button>
+                <button
+                  onClick={() => setCurrentView('subscription')}
+                  className={`text-sm font-medium ${currentView === 'subscription' ? 'text-blue-600' : 'text-gray-600 hover:text-blue-600'}`}
+                >
+                  Subscription
+                </button>
+              </div>
+              
+              <div className="flex items-center space-x-4">
+                <div className="text-right">
+                  <div className="text-sm font-medium text-gray-900">{user?.first_name} {user?.last_name}</div>
+                  <div className="text-sm text-gray-500">{user?.company_name}</div>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 text-sm"
+                >
+                  Logout
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <Dashboard />
-        
-        <div className="px-4 py-6 sm:px-0">
-          <EmployeeForm onEmployeeAdded={handleEmployeeAdded} />
-          
-          <EmployeeList 
-            employees={employees} 
-            onVerifyEmployee={handleVerifyEmployee}
-          />
-          
-          <VerificationResults results={verificationResults} />
-        </div>
+        {currentView === 'subscription' ? (
+          <SubscriptionDashboard />
+        ) : (
+          <>
+            <Dashboard user={user} />
+            
+            <div className="px-4 py-6 sm:px-0">
+              {user?.current_plan ? (
+                <>
+                  <EmployeeForm onEmployeeAdded={handleEmployeeAdded} />
+                  <EmployeeList 
+                    employees={employees} 
+                    onVerifyEmployee={handleVerifyEmployee}
+                  />
+                  <VerificationResults results={verificationResults} />
+                </>
+              ) : (
+                <div className="bg-white rounded-lg shadow-md p-8 text-center">
+                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                  <h3 className="mt-4 text-lg font-medium text-gray-900">Subscription Required</h3>
+                  <p className="mt-2 text-sm text-gray-600">
+                    You need an active subscription to start verifying employees.
+                  </p>
+                  <button
+                    onClick={() => setCurrentView('subscription')}
+                    className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
+                  >
+                    Choose Subscription Plan
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </main>
     </div>
+  );
+};
+
+const AuthWrapper = () => {
+  const [currentMode, setCurrentMode] = useState('login');
+  const { user, loading, isAuthenticated } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    if (currentMode === 'login') {
+      return <Login onSwitchToRegister={() => setCurrentMode('register')} />;
+    } else {
+      return <Register onSwitchToLogin={() => setCurrentMode('login')} />;
+    }
+  }
+
+  // User is authenticated but no subscription
+  if (!user?.current_plan) {
+    return <SubscriptionPlans onSubscriptionCreated={() => window.location.reload()} />;
+  }
+
+  // User is authenticated and has subscription
+  return <MainApp />;
+};
+
+const App = () => {
+  return (
+    <AuthProvider>
+      <AuthWrapper />
+    </AuthProvider>
   );
 };
 
