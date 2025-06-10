@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from "react";
 import "./App.css";
 import axios from "axios";
+import { AuthProvider, useAuth } from "./AuthContext";
+import Login from "./components/Login";
+import Register from "./components/Register";
+import SubscriptionPlans from "./components/SubscriptionPlans";
+import SubscriptionDashboard from "./components/SubscriptionDashboard";
 
+// Configure axios defaults
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
