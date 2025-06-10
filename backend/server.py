@@ -103,6 +103,7 @@ class VerificationType(str, Enum):
 # Models
 class Employee(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str  # Links employee to user account
     first_name: str
     last_name: str
     middle_name: Optional[str] = None
