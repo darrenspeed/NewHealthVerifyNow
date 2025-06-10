@@ -179,8 +179,8 @@ async def check_sam_exclusion(employee: Employee) -> VerificationResult:
             await db.verification_results.insert_one(result.dict())
             return result
 
-        # SAM.gov API endpoint for exclusions
-        base_url = "https://api.sam.gov/entity-information/v3/exclusions"
+        # SAM.gov API endpoint for exclusions - updated to current v1 API
+        base_url = "https://api.sam.gov/prod/api/v1/exclusions"
         
         # Search parameters - we'll search by name and potentially SSN
         params = {
