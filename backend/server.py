@@ -103,46 +103,198 @@ class BatchVerificationRequest(BaseModel):
     verification_types: List[VerificationType]
 
 # OIG Exclusion Check Functions
+OIG_DATA_FILE = ROOT_DIR / "oig_exclusions.csv"
+OIG_DOWNLOAD_URL = "https://oig.hhs.gov/exclusions/downloadables/UPDATED.csv"
+
 async def download_oig_data():
-    """Download the latest OIG exclusion list"""
+    """Download the latest OIG exclusion list from HHS.gov"""
     try:
-        url = "https://oig.hhs.gov/exclusions/exclusions_list.asp"
-        # For now, we'll use a simplified approach - in production you'd download the actual CSV
-        # The real URL for the CSV download is: https://oig.hhs.gov/exclusions/downloadables/UPDATED.csv
-        logger.info("Downloading OIG exclusion data...")
+        logger.info("Downloading OIG exclusion data from HHS.gov...")
         
-        # This is a placeholder - we'll implement actual CSV download later
-        return True
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.get(OIG_DOWNLOAD_URL)
+            
+            if response.status_code == 200:
+                # Save the data to local file
+                async with aiofiles.open(OIG_DATA_FILE, 'wb') as f:
+                    await f.write(response.content)
+                
+                logger.info(f"OIG data downloaded successfully: {len(response.content)} bytes")
+                
+                # Load data into memory for faster searches
+                await load_oig_data_to_memory()
+                return True
+            else:
+                logger.error(f"Failed to download OIG data: HTTP {response.status_code}")
+                return False
+                
     except Exception as e:
         logger.error(f"Error downloading OIG data: {e}")
         return False
 
-async def check_oig_exclusion(employee: Employee) -> VerificationResult:
-    """Check if employee is in OIG exclusion list"""
+# In-memory OIG data storage for fast searches
+oig_exclusions_cache = []
+
+async def load_oig_data_to_memory():
+    """Load OIG exclusion data into memory for fast searches"""
+    global oig_exclusions_cache
+    
+    if not OIG_DATA_FILE.exists():
+        logger.warning("OIG data file not found, attempting to download...")
+        if not await download_oig_data():
+            return False
+    
     try:
-        # For MVP, we'll simulate the check with some basic logic
-        # In production, this would search through the downloaded OIG CSV data
+        logger.info("Loading OIG exclusion data into memory...")
+        exclusions = []
         
-        full_name = f"{employee.first_name} {employee.last_name}".lower()
+        async with aiofiles.open(OIG_DATA_FILE, mode='r', encoding='utf-8') as f:
+            content = await f.read()
+            
+        # Parse CSV content
+        csv_reader = csv.DictReader(io.StringIO(content))
         
-        # Simulate some exclusions for demo purposes
-        demo_exclusions = [
-            "john doe", "jane smith", "test user", "demo person"
-        ]
+        for row in csv_reader:
+            # Clean and normalize data
+            exclusion = {
+                'lastname': row.get('LASTNAME', '').strip().upper(),
+                'firstname': row.get('FIRSTNAME', '').strip().upper(),
+                'midname': row.get('MIDNAME', '').strip().upper(),
+                'busname': row.get('BUSNAME', '').strip().upper(),
+                'general': row.get('GENERAL', '').strip(),
+                'specialty': row.get('SPECIALTY', '').strip(),
+                'upin': row.get('UPIN', '').strip(),
+                'npi': row.get('NPI', '').strip(),
+                'dob': row.get('DOB', '').strip(),
+                'address': row.get('ADDRESS', '').strip(),
+                'city': row.get('CITY', '').strip(),
+                'state': row.get('STATE', '').strip(),
+                'zip': row.get('ZIP', '').strip(),
+                'excltype': row.get('EXCLTYPE', '').strip(),
+                'excldate': row.get('EXCLDATE', '').strip(),
+                'reindate': row.get('REINDATE', '').strip(),
+                'waiverdate': row.get('WAIVERDATE', '').strip(),
+                'wvrstate': row.get('WVRSTATE', '').strip()
+            }
+            exclusions.append(exclusion)
         
-        is_excluded = full_name in demo_exclusions
+        oig_exclusions_cache = exclusions
+        logger.info(f"Loaded {len(exclusions)} OIG exclusions into memory")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error loading OIG data: {e}")
+        return False
+
+def normalize_name(name):
+    """Normalize a name for comparison"""
+    if not name:
+        return ""
+    return name.strip().upper().replace('.', '').replace(',', '').replace('-', ' ')
+
+def search_oig_exclusions(first_name, last_name, middle_name=None):
+    """Search OIG exclusions for matching individuals"""
+    matches = []
+    
+    if not oig_exclusions_cache:
+        logger.warning("OIG data not loaded in memory")
+        return matches
+    
+    # Normalize search terms
+    search_first = normalize_name(first_name)
+    search_last = normalize_name(last_name)
+    search_middle = normalize_name(middle_name) if middle_name else ""
+    
+    for exclusion in oig_exclusions_cache:
+        # Check for exact matches on first and last name
+        if (exclusion['firstname'] == search_first and 
+            exclusion['lastname'] == search_last):
+            
+            match_score = 100  # Exact first + last name match
+            
+            # Check middle name if provided
+            if search_middle and exclusion['midname']:
+                if exclusion['midname'] == search_middle:
+                    match_score = 100  # Perfect match
+                elif exclusion['midname'].startswith(search_middle) or search_middle.startswith(exclusion['midname']):
+                    match_score = 95   # Partial middle name match
+                else:
+                    match_score = 85   # Different middle name
+            
+            matches.append({
+                'exclusion': exclusion,
+                'match_score': match_score,
+                'match_type': 'exact_name'
+            })
+    
+    # Sort by match score (highest first)
+    matches.sort(key=lambda x: x['match_score'], reverse=True)
+    
+    return matches
+
+async def check_oig_exclusion(employee: Employee) -> VerificationResult:
+    """Check if employee is in OIG exclusion list using real HHS data"""
+    try:
+        # Ensure OIG data is loaded
+        if not oig_exclusions_cache:
+            logger.info("OIG data not in memory, loading...")
+            await load_oig_data_to_memory()
+        
+        if not oig_exclusions_cache:
+            logger.error("Failed to load OIG exclusion data")
+            result = VerificationResult(
+                employee_id=employee.id,
+                verification_type=VerificationType.OIG,
+                status=VerificationStatus.ERROR,
+                error_message="OIG exclusion database not available",
+                data_source="OIG LEIE Database"
+            )
+            await db.verification_results.insert_one(result.dict())
+            return result
+        
+        # Search for matches
+        matches = search_oig_exclusions(
+            employee.first_name, 
+            employee.last_name, 
+            employee.middle_name
+        )
+        
+        is_excluded = len(matches) > 0
+        
+        # Prepare match details for high-confidence matches
+        high_confidence_matches = [m for m in matches if m['match_score'] >= 90]
         
         result = VerificationResult(
             employee_id=employee.id,
             verification_type=VerificationType.OIG,
-            status=VerificationStatus.FAILED if is_excluded else VerificationStatus.PASSED,
+            status=VerificationStatus.FAILED if len(high_confidence_matches) > 0 else VerificationStatus.PASSED,
             results={
-                "excluded": is_excluded,
-                "match_details": f"Full name search: {full_name}" if is_excluded else "No matches found",
+                "excluded": len(high_confidence_matches) > 0,
+                "total_matches_found": len(matches),
+                "high_confidence_matches": len(high_confidence_matches),
+                "match_details": [
+                    {
+                        "name": f"{match['exclusion']['firstname']} {match['exclusion']['midname']} {match['exclusion']['lastname']}".strip(),
+                        "business_name": match['exclusion']['busname'],
+                        "exclusion_type": match['exclusion']['excltype'],
+                        "exclusion_date": match['exclusion']['excldate'],
+                        "address": f"{match['exclusion']['address']}, {match['exclusion']['city']}, {match['exclusion']['state']} {match['exclusion']['zip']}".strip().rstrip(','),
+                        "specialty": match['exclusion']['specialty'],
+                        "npi": match['exclusion']['npi'],
+                        "match_score": match['match_score']
+                    }
+                    for match in high_confidence_matches[:5]  # Limit to top 5 matches
+                ],
                 "search_criteria": {
                     "first_name": employee.first_name,
                     "last_name": employee.last_name,
+                    "middle_name": employee.middle_name,
                     "ssn_last_4": employee.ssn[-4:] if len(employee.ssn) >= 4 else "N/A"
+                },
+                "database_info": {
+                    "total_exclusions_in_database": len(oig_exclusions_cache),
+                    "last_updated": datetime.utcnow().isoformat(),
+                    "source": "HHS OIG LEIE Database"
                 }
             },
             data_source="OIG LEIE Database"
@@ -150,6 +302,8 @@ async def check_oig_exclusion(employee: Employee) -> VerificationResult:
         
         # Store result in database
         await db.verification_results.insert_one(result.dict())
+        
+        logger.info(f"OIG check completed for {employee.first_name} {employee.last_name}: {result.status} ({len(high_confidence_matches)} high-confidence matches)")
         
         return result
         
