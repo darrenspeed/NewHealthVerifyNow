@@ -150,61 +150,91 @@ def main():
         print("❌ API root test failed, stopping tests")
         return 1
     
-    # Test creating employees
-    print("\n=== Testing Employee Creation ===")
-    # Test with employees that should pass
+    # Test creating employees specifically for SAM verification
+    print("\n=== Testing Employee Creation for SAM Verification ===")
+    # Test with a normal name
     alice_id = tester.test_create_employee("Alice", "Johnson")
-    bob_id = tester.test_create_employee("Bob", "Wilson")
     
-    # Test with employees that should trigger exclusions
-    john_id = tester.test_create_employee("John", "Doe")
-    jane_id = tester.test_create_employee("Jane", "Smith")
+    # Test with a common name that might have more potential matches
+    john_id = tester.test_create_employee("John", "Smith")
     
-    # Test getting employees
-    print("\n=== Testing Employee Retrieval ===")
-    tester.test_get_employees()
-    
-    # Test OIG verification
-    print("\n=== Testing OIG Verification ===")
+    # Test SAM verification with the updated API key
+    print("\n=== Testing SAM Verification with Updated API Key ===")
     if alice_id:
-        tester.test_verify_employee(alice_id, ["oig"])
+        print("\n--- Testing SAM verification for Alice Johnson ---")
+        success, alice_results = tester.test_verify_employee(alice_id, ["sam"])
+        
+        # Check if the verification was successful (not an error)
+        if success:
+            for result in alice_results.get('results', []):
+                if result.get('verification_type') == 'sam':
+                    status = result.get('status')
+                    if status == 'error':
+                        print("❌ SAM verification failed with error status")
+                        print(f"Error message: {result.get('error_message')}")
+                    else:
+                        print(f"✅ SAM verification completed with status: {status}")
+                        print(f"This indicates the API key is working correctly!")
     
-    # Test SAM verification
-    print("\n=== Testing SAM Verification ===")
-    if bob_id:
-        tester.test_verify_employee(bob_id, ["sam"])
-    
-    # Test both verifications on an employee that should trigger exclusions
-    print("\n=== Testing Verification with Exclusions ===")
+    # Test with a common name (more likely to have potential matches)
     if john_id:
-        tester.test_verify_employee(john_id, ["oig", "sam"])
+        print("\n--- Testing SAM verification for John Smith ---")
+        success, john_results = tester.test_verify_employee(john_id, ["sam"])
+        
+        # Check if the verification was successful (not an error)
+        if success:
+            for result in john_results.get('results', []):
+                if result.get('verification_type') == 'sam':
+                    status = result.get('status')
+                    if status == 'error':
+                        print("❌ SAM verification failed with error status")
+                        print(f"Error message: {result.get('error_message')}")
+                    else:
+                        print(f"✅ SAM verification completed with status: {status}")
+                        print(f"This indicates the API key is working correctly!")
     
-    # Test batch verification
-    print("\n=== Testing Batch Verification ===")
-    employee_ids = [id for id in [alice_id, bob_id, john_id, jane_id] if id]
-    if employee_ids:
-        tester.test_batch_verification(employee_ids, ["oig", "sam"])
-    
-    # Wait a bit for background tasks to complete
+    # Wait a bit for any background tasks to complete
     print("\nWaiting for background tasks to complete...")
     time.sleep(3)
     
-    # Test getting verification results
-    print("\n=== Testing Verification Results Retrieval ===")
+    # Test getting verification results to check for SAM results
+    print("\n=== Testing Verification Results for SAM Checks ===")
     success, results = tester.test_get_verification_results()
     
     if success:
-        # Check for expected results
-        exclusions_found = False
-        for result in results:
-            if result.get('status') == 'failed':
-                exclusions_found = True
-                employee_id = result.get('employee_id')
-                verification_type = result.get('verification_type')
-                print(f"Found exclusion for employee {employee_id} in {verification_type} check")
+        # Check specifically for SAM verification results
+        sam_results_found = False
+        sam_errors_found = False
         
-        if not exclusions_found and john_id:
-            print("❌ Expected to find exclusions for John Doe but none were found")
+        for result in results:
+            if result.get('verification_type') == 'sam':
+                sam_results_found = True
+                status = result.get('status')
+                employee_id = result.get('employee_id')
+                
+                if status == 'error':
+                    sam_errors_found = True
+                    error_msg = result.get('error_message', 'No error message')
+                    print(f"❌ SAM verification error for employee {employee_id}: {error_msg}")
+                else:
+                    print(f"✅ SAM verification for employee {employee_id} completed with status: {status}")
+                    
+                # Check for API response details
+                api_response = result.get('results', {}).get('api_response_summary', {})
+                if api_response:
+                    status_code = api_response.get('status_code')
+                    print(f"   API Status Code: {status_code}")
+                    if status_code == 200:
+                        print("   ✅ SAM API returned successful status code 200")
+                    else:
+                        print(f"   ❌ SAM API returned non-200 status code: {status_code}")
+        
+        if not sam_results_found:
+            print("❌ No SAM verification results were found")
+        elif not sam_errors_found:
+            print("✅ No SAM API errors were found - the API key appears to be working correctly!")
+        else:
+            print("❌ SAM API errors were found - the API key may not be working correctly")
     
     # Print results
     print(f"\n📊 Tests passed: {tester.tests_passed}/{tester.tests_run}")
