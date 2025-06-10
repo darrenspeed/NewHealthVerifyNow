@@ -180,13 +180,12 @@ async def check_sam_exclusion(employee: Employee) -> VerificationResult:
             return result
 
         # SAM.gov API endpoint for exclusions - updated to current v1 API
-        base_url = "https://api.sam.gov/entity-information/v1/entities"
+        base_url = "https://api.sam.gov/prod/api/v1/exclusions"
         
         # Search parameters - we'll search by name and potentially SSN
         params = {
             "api_key": sam_api_key,
-            "q": f"{employee.first_name} {employee.last_name}",
-            "includeSections": "entityRegistration",
+            "name": f"{employee.first_name} {employee.last_name}",
             "format": "json",
             "page": "0",
             "size": "10"
