@@ -186,7 +186,7 @@ async def check_sam_exclusion(employee: Employee) -> VerificationResult:
         params = {
             "api_key": sam_api_key,
             "q": f"{employee.first_name} {employee.last_name}",
-            "includeSections": "entityRegistration,exclusions",
+            "includeSections": "entityRegistration",
             "format": "json",
             "page": "0",
             "size": "10"
