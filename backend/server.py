@@ -707,7 +707,7 @@ async def create_subscription(
             paypal_subscription = {
                 'subscription_id': mock_subscription_id,
                 'approval_url': f"https://www.paypal.com/checkoutnow?token=DEMO-{str(uuid.uuid4())[:8]}",
-                'status': 'APPROVAL_PENDING'
+                'status': 'active'  # Set as active for demo mode
             }
             
             logger.info(f"Created demo subscription for customer validation: {mock_subscription_id}")
