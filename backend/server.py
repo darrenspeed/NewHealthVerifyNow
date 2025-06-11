@@ -674,50 +674,49 @@ async def create_subscription(
                 detail="User already has an active subscription"
             )
         
-        # Simplified PayPal integration - create subscription directly
+        # Simple PayPal Payment Button Approach
         try:
-            # For live payments, we'll use a simplified subscription approach
-            # that doesn't require complex product creation
-            
             # Calculate total monthly cost
-            total_monthly_cost = subscription_data.employee_count * (monthly_cost / subscription_data.employee_count)
+            total_monthly_cost = monthly_cost
             
-            # Create a simple subscription request directly
-            subscription_data_payload = {
-                "plan_id": "health-verify-now-basic",  # We'll use a fixed plan ID
-                "start_time": (datetime.utcnow() + timedelta(minutes=1)).isoformat() + "Z",
-                "quantity": str(subscription_data.employee_count),
-                "custom_id": f"hvn-{current_user.id}-{subscription_data.employee_count}",
-                "application_context": {
-                    "brand_name": "Health Verify Now",
-                    "user_action": "SUBSCRIBE_NOW",
-                    "payment_method": {
-                        "payer_selected": "PAYPAL",
-                        "payee_preferred": "IMMEDIATE_PAYMENT_REQUIRED"
-                    },
-                    "return_url": "https://www.healthverifynow.com/subscription/success",
-                    "cancel_url": "https://www.healthverifynow.com/subscription/cancel"
-                }
-            }
+            # Create a simple PayPal payment link for the monthly subscription
+            # Using PayPal's simple payment links (no complex API required)
             
-            # For now, let's create a mock successful subscription for testing
-            # This allows customers to complete the flow and you can invoice separately
-            mock_subscription_id = f"I-{str(uuid.uuid4())[:8].upper()}"
+            # Generate a unique payment reference
+            payment_reference = f"HVN-{current_user.id[:8]}-{subscription_data.employee_count}-{datetime.utcnow().strftime('%Y%m%d')}"
+            
+            # Create PayPal payment URL (this is the simple approach)
+            paypal_payment_url = (
+                f"https://www.paypal.com/cgi-bin/webscr?"
+                f"cmd=_xclick&"
+                f"business={os.environ.get('PAYPAL_BUSINESS_EMAIL', 'your-business@paypal.com')}&"
+                f"item_name=Health Verify Now - {plan_name} Plan ({subscription_data.employee_count} employees)&"
+                f"amount={total_monthly_cost:.2f}&"
+                f"currency_code=USD&"
+                f"custom={payment_reference}&"
+                f"return=https://www.healthverifynow.com/payment/success&"
+                f"cancel_return=https://www.healthverifynow.com/payment/cancel&"
+                f"notify_url=https://www.healthverifynow.com/api/paypal/ipn"
+            )
+            
+            # Create subscription record as "pending_payment"
+            subscription_id = str(uuid.uuid4())
             
             paypal_subscription = {
-                'subscription_id': mock_subscription_id,
-                'approval_url': f"https://www.paypal.com/checkoutnow?token=DEMO-{str(uuid.uuid4())[:8]}",
-                'status': 'active'  # Set as active for demo mode
+                'subscription_id': subscription_id,
+                'approval_url': paypal_payment_url,
+                'status': 'pending_payment',
+                'payment_reference': payment_reference
             }
             
-            logger.info(f"Created demo subscription for customer validation: {mock_subscription_id}")
-            logger.info(f"Customer: {current_user.email}, Plan: {plan_name}, Cost: ${monthly_cost}/month")
+            logger.info(f"Created PayPal payment link for customer: {current_user.email}")
+            logger.info(f"Amount: ${total_monthly_cost}, Plan: {plan_name}, Reference: {payment_reference}")
             
         except Exception as e:
-            logger.error(f"Error in subscription creation: {e}")
+            logger.error(f"Error creating PayPal payment link: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Subscription service temporarily unavailable"
+                detail="Payment link creation failed"
             )
         
         # Save subscription to database
