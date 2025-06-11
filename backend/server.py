@@ -775,7 +775,7 @@ async def get_user_subscription(current_user: User = Depends(get_current_user)):
     try:
         subscription = await db.subscriptions.find_one({
             "user_id": current_user.id,
-            "status": {"$in": ["active", "pending"]}
+            "status": {"$in": ["active", "pending", "APPROVAL_PENDING"]}
         })
         
         if not subscription:
