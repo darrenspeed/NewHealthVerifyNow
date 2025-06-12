@@ -358,7 +358,7 @@ async def scheduled_data_updates():
     # Store update status in database for tracking
     update_record = {
         "id": str(uuid.uuid4()),
-        "timestamp": datetime.utcnow(),
+        "timestamp": datetime.utcnow().isoformat(),
         "oig_success": oig_success,
         "sam_success": sam_success,
         "oig_count": len(oig_exclusions_cache),
