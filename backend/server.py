@@ -622,17 +622,29 @@ async def test_sam_api():
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(base_url, params=params)
             
+            response_data = None
+            total_records = None
+            
+            if response.status_code == 200:
+                try:
+                    response_data = response.json()
+                    total_records = response_data.get('totalRecords', 0)
+                except Exception as json_error:
+                    response_data = f"JSON parse error: {str(json_error)}"
+            
             return {
                 "status_code": response.status_code,
                 "endpoint": base_url,
                 "api_version": "V4",
-                "response_preview": response.text[:500] if response.status_code != 200 else "Success",
-                "total_records": response.json().get('totalRecords', 0) if response.status_code == 200 else None,
+                "response_preview": response.text[:500] if response.status_code != 200 else "Success - response parsed",
+                "response_headers": dict(response.headers),
+                "total_records": total_records,
                 "api_key_configured": bool(sam_api_key),
-                "api_key_partial": f"{sam_api_key[:8]}...{sam_api_key[-4:]}" if sam_api_key else None
+                "api_key_partial": f"{sam_api_key[:8]}...{sam_api_key[-4:]}" if sam_api_key else None,
+                "raw_response_sample": response.text[:200] if response.status_code == 200 else None
             }
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": str(e), "error_type": type(e).__name__}
 
 @api_router.get("/pricing")
 async def get_pricing():
