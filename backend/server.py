@@ -20,7 +20,6 @@ import hashlib
 import sys
 import pandas as pd
 from datetime import datetime, timedelta
-import schedule
 import threading
 import time
 
