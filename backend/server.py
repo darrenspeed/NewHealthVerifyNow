@@ -982,7 +982,294 @@ async def cancel_subscription(current_user: User = Depends(get_current_user)):
             detail="Failed to cancel subscription"
         )
 
-# ========== EMPLOYEE MANAGEMENT ROUTES (Authenticated) ==========
+# ========== BATCH UPLOAD ROUTES (Authenticated) ==========
+
+@api_router.post("/employees/batch-upload")
+async def upload_employees_csv(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload CSV file with employee data for batch processing"""
+    try:
+        # Validate file type
+        if not file.filename.endswith(('.csv', '.xlsx', '.xls')):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File must be CSV, Excel (.xlsx), or Excel (.xls) format"
+            )
+        
+        # Check file size (limit to 10MB)
+        file_content = await file.read()
+        if len(file_content) > 10 * 1024 * 1024:  # 10MB
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File size must be less than 10MB"
+            )
+        
+        # Create upload record
+        upload_id = str(uuid.uuid4())
+        upload_record = {
+            "upload_id": upload_id,
+            "user_id": current_user.id,
+            "filename": file.filename,
+            "total_rows": 0,
+            "successful_imports": 0,
+            "failed_imports": 0,
+            "errors": [],
+            "status": "processing",
+            "created_at": datetime.utcnow(),
+            "completed_at": None
+        }
+        
+        await db.batch_uploads.insert_one(upload_record)
+        
+        # Start background processing
+        background_tasks.add_task(
+            process_employee_csv,
+            upload_id,
+            file_content,
+            file.filename,
+            current_user.id
+        )
+        
+        logger.info(f"Started batch upload processing for user {current_user.email}: {file.filename}")
+        
+        return {
+            "upload_id": upload_id,
+            "message": "File upload started. Processing in background.",
+            "status": "processing"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error starting batch upload: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to start batch upload"
+        )
+
+@api_router.get("/employees/batch-upload/{upload_id}/status")
+async def get_batch_upload_status(
+    upload_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Get status of batch upload processing"""
+    try:
+        upload_record = await db.batch_uploads.find_one({
+            "upload_id": upload_id,
+            "user_id": current_user.id
+        })
+        
+        if not upload_record:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Upload not found"
+            )
+        
+        # Calculate progress percentage
+        progress = 0
+        if upload_record["total_rows"] > 0:
+            processed = upload_record["successful_imports"] + upload_record["failed_imports"]
+            progress = int((processed / upload_record["total_rows"]) * 100)
+        
+        return BatchUploadStatus(
+            upload_id=upload_id,
+            status=upload_record["status"],
+            progress=progress,
+            total_rows=upload_record["total_rows"],
+            processed_rows=upload_record["successful_imports"] + upload_record["failed_imports"],
+            successful_imports=upload_record["successful_imports"],
+            failed_imports=upload_record["failed_imports"],
+            errors=upload_record["errors"][:10]  # Limit to first 10 errors
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting batch upload status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get upload status"
+        )
+
+@api_router.get("/employees/batch-uploads")
+async def get_batch_upload_history(current_user: User = Depends(get_current_user)):
+    """Get batch upload history for current user"""
+    try:
+        uploads = await db.batch_uploads.find({
+            "user_id": current_user.id
+        }).sort("created_at", -1).limit(50).to_list(50)
+        
+        return [BatchUploadResult(**upload) for upload in uploads]
+        
+    except Exception as e:
+        logger.error(f"Error getting batch upload history: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get upload history"
+        )
+
+async def process_employee_csv(upload_id: str, file_content: bytes, filename: str, user_id: str):
+    """Background task to process CSV file and create employees"""
+    try:
+        logger.info(f"Starting CSV processing for upload {upload_id}")
+        
+        # Parse CSV/Excel file
+        employees_data = []
+        errors = []
+        
+        if filename.endswith('.csv'):
+            # Parse CSV
+            try:
+                csv_content = file_content.decode('utf-8')
+                csv_reader = csv.DictReader(io.StringIO(csv_content))
+                employees_data = list(csv_reader)
+            except UnicodeDecodeError:
+                # Try different encoding
+                csv_content = file_content.decode('latin-1')
+                csv_reader = csv.DictReader(io.StringIO(csv_content))
+                employees_data = list(csv_reader)
+        else:
+            # Parse Excel
+            df = pd.read_excel(io.BytesIO(file_content))
+            employees_data = df.to_dict('records')
+        
+        total_rows = len(employees_data)
+        successful_imports = 0
+        failed_imports = 0
+        
+        # Update total rows
+        await db.batch_uploads.update_one(
+            {"upload_id": upload_id},
+            {"$set": {"total_rows": total_rows}}
+        )
+        
+        logger.info(f"Processing {total_rows} rows for upload {upload_id}")
+        
+        # Process each employee
+        for row_index, row_data in enumerate(employees_data):
+            try:
+                # Map CSV columns to employee fields (flexible column mapping)
+                employee_data = map_csv_row_to_employee(row_data)
+                
+                # Validate required fields
+                if not employee_data.get('first_name') or not employee_data.get('last_name'):
+                    errors.append({
+                        "row": row_index + 1,
+                        "error": "Missing required fields: first_name and last_name",
+                        "data": row_data
+                    })
+                    failed_imports += 1
+                    continue
+                
+                # Add user_id and create employee
+                employee_data['user_id'] = user_id
+                employee = Employee(**employee_data)
+                
+                # Check if employee already exists (by name + SSN)
+                existing = await db.employees.find_one({
+                    "user_id": user_id,
+                    "first_name": employee.first_name,
+                    "last_name": employee.last_name,
+                    "ssn": employee.ssn
+                })
+                
+                if existing:
+                    errors.append({
+                        "row": row_index + 1,
+                        "error": "Employee already exists",
+                        "data": {"name": f"{employee.first_name} {employee.last_name}", "ssn": employee.ssn[-4:] if employee.ssn else "N/A"}
+                    })
+                    failed_imports += 1
+                    continue
+                
+                # Insert employee
+                await db.employees.insert_one(employee.dict())
+                successful_imports += 1
+                
+                # Update progress every 10 employees
+                if (row_index + 1) % 10 == 0:
+                    await db.batch_uploads.update_one(
+                        {"upload_id": upload_id},
+                        {
+                            "$set": {
+                                "successful_imports": successful_imports,
+                                "failed_imports": failed_imports,
+                                "errors": errors[:100]  # Keep only first 100 errors
+                            }
+                        }
+                    )
+                
+            except Exception as e:
+                errors.append({
+                    "row": row_index + 1,
+                    "error": str(e),
+                    "data": row_data
+                })
+                failed_imports += 1
+                logger.warning(f"Error processing row {row_index + 1}: {e}")
+        
+        # Final update
+        await db.batch_uploads.update_one(
+            {"upload_id": upload_id},
+            {
+                "$set": {
+                    "successful_imports": successful_imports,
+                    "failed_imports": failed_imports,
+                    "errors": errors[:100],
+                    "status": "completed",
+                    "completed_at": datetime.utcnow()
+                }
+            }
+        )
+        
+        logger.info(f"Completed CSV processing for upload {upload_id}: {successful_imports} successful, {failed_imports} failed")
+        
+    except Exception as e:
+        logger.error(f"Error in CSV processing for upload {upload_id}: {e}")
+        await db.batch_uploads.update_one(
+            {"upload_id": upload_id},
+            {
+                "$set": {
+                    "status": "failed",
+                    "errors": [{"error": f"Processing failed: {str(e)}"}],
+                    "completed_at": datetime.utcnow()
+                }
+            }
+        )
+
+def map_csv_row_to_employee(row_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Map CSV row data to employee fields with flexible column naming"""
+    
+    # Define possible column name variations
+    column_mappings = {
+        'first_name': ['first_name', 'firstname', 'first name', 'fname', 'given_name'],
+        'last_name': ['last_name', 'lastname', 'last name', 'lname', 'surname', 'family_name'],
+        'middle_name': ['middle_name', 'middlename', 'middle name', 'mname', 'middle_initial'],
+        'ssn': ['ssn', 'social_security_number', 'social security number', 'social_security', 'ss_number'],
+        'date_of_birth': ['date_of_birth', 'dob', 'birth_date', 'birthdate', 'date of birth'],
+        'email': ['email', 'email_address', 'email address', 'e_mail', 'work_email'],
+        'phone': ['phone', 'phone_number', 'phone number', 'telephone', 'mobile', 'cell'],
+        'license_number': ['license_number', 'license number', 'license_no', 'license', 'professional_license'],
+        'license_type': ['license_type', 'license type', 'license_category', 'profession', 'credential'],
+        'license_state': ['license_state', 'license state', 'state', 'license_jurisdiction']
+    }
+    
+    employee_data = {}
+    
+    # Normalize column names (lowercase, strip spaces)
+    normalized_row = {k.lower().strip(): v for k, v in row_data.items() if v is not None and str(v).strip()}
+    
+    # Map fields
+    for field_name, possible_columns in column_mappings.items():
+        for col_name in possible_columns:
+            if col_name in normalized_row and str(normalized_row[col_name]).strip():
+                employee_data[field_name] = str(normalized_row[col_name]).strip()
+                break
+    
+    return employee_data
 
 @api_router.post("/employees", response_model=Employee)
 async def create_employee(
