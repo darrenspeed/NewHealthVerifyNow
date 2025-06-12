@@ -623,6 +623,7 @@ const MainApp = () => {
             <div className="px-4 py-6 sm:px-0">
               {user?.current_plan ? (
                 <>
+                  <BatchUpload onUploadComplete={() => fetchEmployees()} />
                   <EmployeeForm onEmployeeAdded={handleEmployeeAdded} />
                   <EmployeeList 
                     employees={employees} 
