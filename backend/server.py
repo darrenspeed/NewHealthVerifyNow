@@ -388,7 +388,11 @@ async def check_oig_exclusion(employee: Employee) -> VerificationResult:
         return error_result
 
 async def check_sam_exclusion(employee: Employee) -> VerificationResult:
-    """Check if employee is in SAM exclusion list using SAM.gov API V4"""
+    """Check if employee is in SAM exclusion list using SAM.gov API V4
+    
+    Note: SAM.gov API V4 only provides bulk data downloads, not real-time individual searches.
+    This function will attempt to use the available API but may have limitations.
+    """
     try:
         sam_api_key = os.environ.get('SAM_API_KEY')
         if not sam_api_key:
@@ -403,19 +407,17 @@ async def check_sam_exclusion(employee: Employee) -> VerificationResult:
             await db.verification_results.insert_one(result.dict())
             return result
 
-        # SAM.gov API V4 endpoint for exclusions (updated for 2025)
+        # SAM.gov API V4 endpoint - Note: This only provides bulk downloads
         base_url = "https://api.sam.gov/entity-information/v4/exclusions"
         
-        # Search parameters using V4 API - more comprehensive search
+        # Search parameters for bulk download (not individual search)
         search_name = f"{employee.first_name} {employee.last_name}".strip()
         params = {
             "api_key": sam_api_key,
             "exclusionName": search_name,
-            "classification": "Individual",  # Search only for individuals
-            "isActive": "Y",  # Only active exclusions
-            "format": "json",
-            "page": "0",
-            "size": "25"  # Increased size for better matching
+            "classification": "Individual",
+            "isActive": "Y",
+            "format": "json"
         }
         
         # Add middle name if available
@@ -427,88 +429,64 @@ async def check_sam_exclusion(employee: Employee) -> VerificationResult:
             response = await client.get(base_url, params=params)
             
             if response.status_code == 200:
-                data = response.json()
-                
-                # V4 API structure - exclusions are in 'exclusionDetails' array
-                exclusions = data.get('exclusionDetails', [])
-                total_records = data.get('totalRecords', 0)
-                
-                # Enhanced matching logic for V4 API
-                verified_matches = []
-                if exclusions:
-                    for exclusion in exclusions:
-                        # V4 API has different field structure
-                        match_score = 0
-                        match_details = {}
-                        
-                        # Extract name fields from V4 response
-                        excl_name = exclusion.get('exclusionName', '').upper()
-                        emp_full_name = f"{employee.first_name} {employee.last_name}".upper()
-                        emp_full_name_with_middle = f"{employee.first_name} {employee.middle_name or ''} {employee.last_name}".upper().replace('  ', ' ')
-                        
-                        # Check for name matches
-                        if emp_full_name in excl_name or excl_name in emp_full_name:
-                            match_score += 80
-                        elif employee.middle_name and (emp_full_name_with_middle in excl_name or excl_name in emp_full_name_with_middle):
-                            match_score += 85
-                        
-                        # Check individual name components
-                        emp_first = employee.first_name.upper()
-                        emp_last = employee.last_name.upper()
-                        
-                        if emp_first in excl_name and emp_last in excl_name:
-                            match_score += 50
-                        
-                        # Only consider high-confidence matches
-                        if match_score >= 70:
-                            match_details = {
-                                "exclusion_name": exclusion.get('exclusionName', 'N/A'),
-                                "exclusion_type": exclusion.get('exclusionType', 'N/A'),
-                                "exclusion_program": exclusion.get('exclusionProgram', 'N/A'),
-                                "excluding_agency": exclusion.get('excludingAgencyName', 'N/A'),
-                                "activation_date": exclusion.get('activationDate', 'N/A'),
-                                "termination_date": exclusion.get('terminationDate', 'N/A'),
-                                "sam_number": exclusion.get('samNumber', 'N/A'),
-                                "cage_code": exclusion.get('cageCode', 'N/A'),
-                                "match_score": match_score,
-                                "classification": exclusion.get('classification', 'N/A'),
-                                "address": {
-                                    "street": exclusion.get('addressLine1', ''),
-                                    "city": exclusion.get('city', ''),
-                                    "state": exclusion.get('stateProvince', ''),
-                                    "zip": exclusion.get('zipCode', ''),
-                                    "country": exclusion.get('country', '')
-                                }
+                # V4 API returns download links, not direct search results
+                if "Extract File will be available" in response.text:
+                    # This is the expected response from V4 API
+                    result = VerificationResult(
+                        employee_id=employee.id,
+                        verification_type=VerificationType.SAM,
+                        status=VerificationStatus.ERROR,
+                        error_message="SAM API V4 only provides bulk downloads, not individual searches. Real-time verification not available.",
+                        results={
+                            "excluded": False,  # Cannot determine from bulk download response
+                            "api_limitation": "SAM.gov API V4 only supports bulk data downloads",
+                            "recommendation": "Consider implementing periodic bulk data download for SAM verification",
+                            "search_criteria": {
+                                "first_name": employee.first_name,
+                                "last_name": employee.last_name,
+                                "middle_name": employee.middle_name,
+                                "exclusion_name_query": params["exclusionName"]
+                            },
+                            "api_response_summary": {
+                                "status_code": response.status_code,
+                                "api_version": "V4",
+                                "endpoint": base_url,
+                                "response_type": "bulk_download"
                             }
-                            verified_matches.append(match_details)
-                
-                result = VerificationResult(
-                    employee_id=employee.id,
-                    verification_type=VerificationType.SAM,
-                    status=VerificationStatus.FAILED if len(verified_matches) > 0 else VerificationStatus.PASSED,
-                    results={
-                        "excluded": len(verified_matches) > 0,
-                        "total_records_found": total_records,
-                        "verified_matches": len(verified_matches),
-                        "match_details": verified_matches[:5],  # Limit to top 5 matches
-                        "search_criteria": {
-                            "first_name": employee.first_name,
-                            "last_name": employee.last_name,
-                            "middle_name": employee.middle_name,
-                            "exclusion_name_query": params["exclusionName"],
-                            "classification": "Individual",
-                            "active_only": True
                         },
-                        "api_response_summary": {
-                            "status_code": response.status_code,
-                            "total_records": total_records,
-                            "exclusions_count": len(exclusions),
-                            "api_version": "V4",
-                            "endpoint": base_url
-                        }
-                    },
-                    data_source="SAM.gov API V4"
-                )
+                        data_source="SAM.gov API V4"
+                    )
+                else:
+                    # Unexpected response format
+                    try:
+                        data = response.json()
+                        exclusions = data.get('exclusionDetails', [])
+                        total_records = data.get('totalRecords', 0)
+                        
+                        result = VerificationResult(
+                            employee_id=employee.id,
+                            verification_type=VerificationType.SAM,
+                            status=VerificationStatus.PASSED if total_records == 0 else VerificationStatus.ERROR,
+                            results={
+                                "excluded": False,  # Would need manual verification
+                                "total_records_found": total_records,
+                                "note": "Unexpected JSON response from SAM API V4 - manual verification recommended",
+                                "search_criteria": {
+                                    "first_name": employee.first_name,
+                                    "last_name": employee.last_name,
+                                    "middle_name": employee.middle_name
+                                }
+                            },
+                            data_source="SAM.gov API V4"
+                        )
+                    except:
+                        result = VerificationResult(
+                            employee_id=employee.id,
+                            verification_type=VerificationType.SAM,
+                            status=VerificationStatus.ERROR,
+                            error_message="Unexpected response format from SAM API V4",
+                            data_source="SAM.gov API V4"
+                        )
                 
             elif response.status_code == 401:
                 logger.error("SAM API authentication failed - check API key")
@@ -556,7 +534,7 @@ async def check_sam_exclusion(employee: Employee) -> VerificationResult:
                     error_message=f"SAM API request failed: HTTP {response.status_code}",
                     results={
                         "api_status_code": response.status_code,
-                        "api_response": response.text[:500],  # First 500 chars of error response
+                        "api_response": response.text[:500],
                         "api_version": "V4"
                     },
                     data_source="SAM.gov API V4"
