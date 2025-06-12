@@ -144,13 +144,27 @@ class VerificationResult(BaseModel):
     checked_at: datetime = Field(default_factory=datetime.utcnow)
     data_source: Optional[str] = None
 
-class VerificationResultCreate(BaseModel):
-    employee_id: str
-    verification_type: VerificationType
-    status: VerificationStatus
-    results: Dict[str, Any] = {}
-    error_message: Optional[str] = None
-    data_source: Optional[str] = None
+class BatchUploadResult(BaseModel):
+    upload_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    filename: str
+    total_rows: int
+    successful_imports: int
+    failed_imports: int
+    errors: List[Dict[str, Any]] = []
+    status: str  # processing, completed, failed
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    completed_at: Optional[datetime] = None
+
+class BatchUploadStatus(BaseModel):
+    upload_id: str
+    status: str
+    progress: int  # percentage
+    total_rows: int
+    processed_rows: int
+    successful_imports: int
+    failed_imports: int
+    errors: List[Dict[str, Any]] = []
 
 class BatchVerificationRequest(BaseModel):
     employee_ids: List[str]
