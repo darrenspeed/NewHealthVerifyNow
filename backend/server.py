@@ -335,6 +335,68 @@ async def load_sam_data_to_memory():
         logger.error(f"Error loading SAM data: {e}")
         return False
 
+async def scheduled_data_updates():
+    """Scheduled task to update both OIG and SAM data"""
+    logger.info("🔄 Starting scheduled data update...")
+    
+    # Update OIG data
+    logger.info("Updating OIG exclusion data...")
+    oig_success = await download_oig_data()
+    if oig_success:
+        logger.info("✅ OIG data updated successfully")
+    else:
+        logger.warning("⚠️ OIG data update failed")
+    
+    # Update SAM data
+    logger.info("Updating SAM exclusion data...")
+    sam_success = await download_sam_data()
+    if sam_success:
+        logger.info("✅ SAM data updated successfully")
+    else:
+        logger.warning("⚠️ SAM data update failed")
+    
+    # Store update status in database for tracking
+    update_record = {
+        "id": str(uuid.uuid4()),
+        "timestamp": datetime.utcnow(),
+        "oig_success": oig_success,
+        "sam_success": sam_success,
+        "oig_count": len(oig_exclusions_cache),
+        "sam_count": len(sam_exclusions_cache)
+    }
+    
+    try:
+        await db.data_updates.insert_one(update_record)
+    except Exception as e:
+        logger.error(f"Failed to record update status: {e}")
+    
+    logger.info(f"🔄 Scheduled update completed. OIG: {oig_success}, SAM: {sam_success}")
+
+def run_scheduled_updates():
+    """Background thread function to run scheduled updates"""
+    while True:
+        try:
+            # Run the async function in the background
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(scheduled_data_updates())
+            loop.close()
+            
+            # Wait 24 hours before next update
+            time.sleep(24 * 60 * 60)  # 24 hours
+            
+        except Exception as e:
+            logger.error(f"Scheduled update error: {e}")
+            # Wait 1 hour before retrying on error
+            time.sleep(60 * 60)
+
+# Start background update thread
+def start_background_updates():
+    """Start the background update thread"""
+    update_thread = threading.Thread(target=run_scheduled_updates, daemon=True)
+    update_thread.start()
+    logger.info("📅 Background data updates scheduled every 24 hours")
+
 def search_sam_exclusions(first_name, last_name, middle_name=None):
     """Search SAM exclusions for matching individuals"""
     matches = []
