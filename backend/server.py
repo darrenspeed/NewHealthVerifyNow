@@ -581,163 +581,97 @@ async def check_oig_exclusion(employee: Employee) -> VerificationResult:
         return error_result
 
 async def check_sam_exclusion(employee: Employee) -> VerificationResult:
-    """Check if employee is in SAM exclusion list using SAM.gov API V4
+    """Check if employee is in SAM exclusion list using downloaded SAM data
     
-    Note: SAM.gov API V4 only provides bulk data downloads, not real-time individual searches.
-    This function will attempt to use the available API but may have limitations.
+    This function now uses locally downloaded SAM data for real-time searches,
+    similar to how OIG verification works.
     """
     try:
-        sam_api_key = os.environ.get('SAM_API_KEY')
-        if not sam_api_key:
-            logger.warning("SAM API key not configured")
+        # Ensure SAM data is loaded
+        if not sam_exclusions_cache:
+            logger.info("SAM data not in memory, loading...")
+            await load_sam_data_to_memory()
+        
+        if not sam_exclusions_cache:
+            logger.error("Failed to load SAM exclusion data")
             result = VerificationResult(
                 employee_id=employee.id,
                 verification_type=VerificationType.SAM,
                 status=VerificationStatus.ERROR,
-                error_message="SAM API key not configured",
-                data_source="SAM.gov API V4"
+                error_message="SAM exclusion database not available",
+                data_source="SAM.gov Bulk Data"
             )
             await db.verification_results.insert_one(result.dict())
             return result
-
-        # SAM.gov API V4 endpoint - Note: This only provides bulk downloads
-        base_url = "https://api.sam.gov/entity-information/v4/exclusions"
         
-        # Search parameters for bulk download (not individual search)
-        search_name = f"{employee.first_name} {employee.last_name}".strip()
-        params = {
-            "api_key": sam_api_key,
-            "exclusionName": search_name,
-            "classification": "Individual",
-            "isActive": "Y",
-            "format": "json"
-        }
+        # Search for matches using local data
+        matches = search_sam_exclusions(
+            employee.first_name, 
+            employee.last_name, 
+            employee.middle_name
+        )
         
-        # Add middle name if available
-        if employee.middle_name:
-            params["exclusionName"] = f"{employee.first_name} {employee.middle_name} {employee.last_name}".strip()
+        # Prepare match details for high-confidence matches
+        high_confidence_matches = [m for m in matches if m['match_score'] >= 90]
         
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            logger.info(f"Checking SAM V4 exclusions for {employee.first_name} {employee.last_name}")
-            response = await client.get(base_url, params=params)
-            
-            if response.status_code == 200:
-                # V4 API returns download links, not direct search results
-                if "Extract File will be available" in response.text:
-                    # This is the expected response from V4 API
-                    result = VerificationResult(
-                        employee_id=employee.id,
-                        verification_type=VerificationType.SAM,
-                        status=VerificationStatus.ERROR,
-                        error_message="SAM API V4 only provides bulk downloads, not individual searches. Real-time verification not available.",
-                        results={
-                            "excluded": False,  # Cannot determine from bulk download response
-                            "api_limitation": "SAM.gov API V4 only supports bulk data downloads",
-                            "recommendation": "Consider implementing periodic bulk data download for SAM verification",
-                            "search_criteria": {
-                                "first_name": employee.first_name,
-                                "last_name": employee.last_name,
-                                "middle_name": employee.middle_name,
-                                "exclusion_name_query": params["exclusionName"]
-                            },
-                            "api_response_summary": {
-                                "status_code": response.status_code,
-                                "api_version": "V4",
-                                "endpoint": base_url,
-                                "response_type": "bulk_download"
-                            }
-                        },
-                        data_source="SAM.gov API V4"
-                    )
-                else:
-                    # Unexpected response format
-                    try:
-                        data = response.json()
-                        exclusions = data.get('exclusionDetails', [])
-                        total_records = data.get('totalRecords', 0)
-                        
-                        result = VerificationResult(
-                            employee_id=employee.id,
-                            verification_type=VerificationType.SAM,
-                            status=VerificationStatus.PASSED if total_records == 0 else VerificationStatus.ERROR,
-                            results={
-                                "excluded": False,  # Would need manual verification
-                                "total_records_found": total_records,
-                                "note": "Unexpected JSON response from SAM API V4 - manual verification recommended",
-                                "search_criteria": {
-                                    "first_name": employee.first_name,
-                                    "last_name": employee.last_name,
-                                    "middle_name": employee.middle_name
-                                }
-                            },
-                            data_source="SAM.gov API V4"
-                        )
-                    except:
-                        result = VerificationResult(
-                            employee_id=employee.id,
-                            verification_type=VerificationType.SAM,
-                            status=VerificationStatus.ERROR,
-                            error_message="Unexpected response format from SAM API V4",
-                            data_source="SAM.gov API V4"
-                        )
-                
-            elif response.status_code == 401:
-                logger.error("SAM API authentication failed - check API key")
-                result = VerificationResult(
-                    employee_id=employee.id,
-                    verification_type=VerificationType.SAM,
-                    status=VerificationStatus.ERROR,
-                    error_message="SAM API authentication failed - invalid API key",
-                    results={"api_status_code": response.status_code, "api_version": "V4"},
-                    data_source="SAM.gov API V4"
-                )
-                
-            elif response.status_code == 429:
-                logger.error("SAM API rate limit exceeded")
-                result = VerificationResult(
-                    employee_id=employee.id,
-                    verification_type=VerificationType.SAM,
-                    status=VerificationStatus.ERROR,
-                    error_message="SAM API rate limit exceeded - try again later",
-                    results={"api_status_code": response.status_code, "api_version": "V4"},
-                    data_source="SAM.gov API V4"
-                )
-            
-            elif response.status_code == 404:
-                logger.error(f"SAM API V4 endpoint not found: {base_url}")
-                result = VerificationResult(
-                    employee_id=employee.id,
-                    verification_type=VerificationType.SAM,
-                    status=VerificationStatus.ERROR,
-                    error_message="SAM API V4 endpoint not found - service may be unavailable",
-                    results={
-                        "api_status_code": response.status_code,
-                        "endpoint": base_url,
-                        "api_version": "V4"
-                    },
-                    data_source="SAM.gov API V4"
-                )
-                
-            else:
-                logger.error(f"SAM API request failed with status {response.status_code}: {response.text}")
-                result = VerificationResult(
-                    employee_id=employee.id,
-                    verification_type=VerificationType.SAM,
-                    status=VerificationStatus.ERROR,
-                    error_message=f"SAM API request failed: HTTP {response.status_code}",
-                    results={
-                        "api_status_code": response.status_code,
-                        "api_response": response.text[:500],
-                        "api_version": "V4"
-                    },
-                    data_source="SAM.gov API V4"
-                )
+        result = VerificationResult(
+            employee_id=employee.id,
+            verification_type=VerificationType.SAM,
+            status=VerificationStatus.FAILED if len(high_confidence_matches) > 0 else VerificationStatus.PASSED,
+            results={
+                "excluded": len(high_confidence_matches) > 0,
+                "total_matches_found": len(matches),
+                "high_confidence_matches": len(high_confidence_matches),
+                "match_details": [
+                    {
+                        "exclusion_name": match['exclusion']['exclusion_name'] or f"{match['exclusion']['first_name']} {match['exclusion']['last_name']}".strip(),
+                        "exclusion_type": match['exclusion']['exclusion_type'],
+                        "exclusion_program": match['exclusion']['exclusion_program'],
+                        "excluding_agency": match['exclusion']['excluding_agency'],
+                        "activation_date": match['exclusion']['activation_date'],
+                        "termination_date": match['exclusion']['termination_date'],
+                        "sam_number": match['exclusion']['sam_number'],
+                        "cage_code": match['exclusion']['cage_code'],
+                        "classification": match['exclusion']['classification'],
+                        "address": f"{match['exclusion']['address_line1']}, {match['exclusion']['city']}, {match['exclusion']['state_province']} {match['exclusion']['zip_code']} {match['exclusion']['country']}".strip().rstrip(','),
+                        "match_score": match['match_score']
+                    }
+                    for match in high_confidence_matches[:5]  # Limit to top 5 matches
+                ],
+                "search_criteria": {
+                    "first_name": employee.first_name,
+                    "last_name": employee.last_name,
+                    "middle_name": employee.middle_name,
+                    "ssn_last_4": employee.ssn[-4:] if len(employee.ssn) >= 4 else "N/A"
+                },
+                "database_info": {
+                    "total_exclusions_in_database": len(sam_exclusions_cache),
+                    "last_updated": datetime.utcnow().isoformat(),
+                    "source": "SAM.gov Bulk Data Download",
+                    "verification_method": "Local Search"
+                }
+            },
+            data_source="SAM.gov Bulk Data"
+        )
         
         # Store result in database
         await db.verification_results.insert_one(result.dict())
-        logger.info(f"SAM V4 check completed for {employee.first_name} {employee.last_name}: {result.status}")
+        
+        logger.info(f"SAM check completed for {employee.first_name} {employee.last_name}: {result.status} ({len(high_confidence_matches)} high-confidence matches)")
         
         return result
+        
+    except Exception as e:
+        logger.error(f"Error checking SAM exclusion for employee {employee.id}: {e}")
+        error_result = VerificationResult(
+            employee_id=employee.id,
+            verification_type=VerificationType.SAM,
+            status=VerificationStatus.ERROR,
+            error_message=str(e),
+            data_source="SAM.gov Bulk Data"
+        )
+        await db.verification_results.insert_one(error_result.dict())
+        return error_result
         
     except httpx.TimeoutException:
         logger.error(f"SAM API timeout for employee {employee.id}")
