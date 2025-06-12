@@ -600,6 +600,40 @@ async def check_sam_exclusion(employee: Employee) -> VerificationResult:
 async def root():
     return {"message": "Health Verify Now API", "version": "1.0.0", "status": "active"}
 
+@api_router.get("/test-sam")
+async def test_sam_api():
+    """Test SAM API V4 connectivity and response"""
+    try:
+        sam_api_key = os.environ.get('SAM_API_KEY')
+        if not sam_api_key:
+            return {"error": "SAM API key not configured"}
+        
+        # Test with a simple query
+        base_url = "https://api.sam.gov/entity-information/v4/exclusions"
+        params = {
+            "api_key": sam_api_key,
+            "classification": "Individual",
+            "isActive": "Y",
+            "format": "json",
+            "page": "0",
+            "size": "5"
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(base_url, params=params)
+            
+            return {
+                "status_code": response.status_code,
+                "endpoint": base_url,
+                "api_version": "V4",
+                "response_preview": response.text[:500] if response.status_code != 200 else "Success",
+                "total_records": response.json().get('totalRecords', 0) if response.status_code == 200 else None,
+                "api_key_configured": bool(sam_api_key),
+                "api_key_partial": f"{sam_api_key[:8]}...{sam_api_key[-4:]}" if sam_api_key else None
+            }
+    except Exception as e:
+        return {"error": str(e)}
+
 @api_router.get("/pricing")
 async def get_pricing():
     """Get pricing tiers"""
