@@ -1788,7 +1788,16 @@ async def startup_event():
     else:
         logger.warning("⚠️ Failed to load OIG exclusion database - will attempt download on first check")
     
+    # Download and load SAM data on startup
+    logger.info("Initializing SAM exclusion database...")
+    if await load_sam_data_to_memory():
+        logger.info("✅ SAM exclusion database loaded successfully")
+    else:
+        logger.warning("⚠️ Failed to load SAM exclusion database - will attempt download on first check")
+    
     logger.info("🚀 Health Verify Now API ready for commercial use!")
+    logger.info("   - OIG verification: Real-time searches against downloaded database")
+    logger.info("   - SAM verification: Real-time searches against downloaded database")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
