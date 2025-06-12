@@ -267,7 +267,8 @@ class HealthVerifyTester:
             auth=True
         )
         if success:
-            print(f"Verification results: {json.dumps(response, indent=2)}")
+            print(f"Verification initiated for employee ID: {employee_id}")
+            print(f"Verification types: {verification_types}")
         return success, response
 
     def test_batch_verification(self, employee_ids, verification_types):
