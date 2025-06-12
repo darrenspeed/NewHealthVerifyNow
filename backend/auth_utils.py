@@ -44,25 +44,25 @@ PRICING_TIERS = [
         "name": "Starter",
         "min_employees": 1,
         "max_employees": 25,
-        "price_per_employee": 4.95
+        "price_per_employee": 1.95
     },
     {
         "name": "Professional", 
         "min_employees": 26,
         "max_employees": 100,
-        "price_per_employee": 3.95
+        "price_per_employee": 1.75
     },
     {
         "name": "Enterprise",
         "min_employees": 101,
         "max_employees": 500,
-        "price_per_employee": 2.95
+        "price_per_employee": 1.25
     },
     {
         "name": "Enterprise+",
         "min_employees": 501,
         "max_employees": None,
-        "price_per_employee": 2.49
+        "price_per_employee": 1.00
     }
 ]
 
