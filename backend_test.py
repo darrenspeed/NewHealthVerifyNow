@@ -315,6 +315,41 @@ class HealthVerifyTester:
             print(f"Retrieved {len(response)} verification results for employee {employee_id}")
         return success, response
 
+def test_sam_api_endpoint(tester):
+    """Test the SAM API test endpoint"""
+    print("\n=== Testing SAM API Test Endpoint ===")
+    success, response = tester.run_test(
+        "SAM API Test Endpoint",
+        "GET",
+        "api/test-sam",
+        200
+    )
+    
+    if success:
+        print("SAM API Test Results:")
+        print(f"API Key Configured: {response.get('api_key_configured', False)}")
+        print(f"Endpoints Tested: {response.get('endpoints_tested', 0)}")
+        
+        # Analyze each endpoint result
+        for i, result in enumerate(response.get('results', []), 1):
+            print(f"\nEndpoint #{i}: {result.get('endpoint')}")
+            print(f"  Status Code: {result.get('status_code')}")
+            print(f"  Content Type: {result.get('content_type')}")
+            print(f"  Is Download Response: {result.get('is_download_response', False)}")
+            print(f"  Is JSON: {result.get('is_json', False)}")
+            
+            if 'error' in result:
+                print(f"  Error: {result.get('error')}")
+            elif result.get('is_json', False):
+                print(f"  Has Exclusion Details: {result.get('has_exclusion_details', False)}")
+                print(f"  Total Records: {result.get('total_records', 'unknown')}")
+            
+            # Show a sample of the response
+            if result.get('response_sample'):
+                print(f"  Response Sample: {result.get('response_sample')[:100]}...")
+    
+    return success, response
+
 def main():
     # Get the backend URL from the frontend .env file
     backend_url = "https://5604b1c7-af2d-4c2d-865a-51fe8d939149.preview.emergentagent.com"
@@ -326,6 +361,10 @@ def main():
     if not tester.test_api_root():
         print("❌ API root test failed, stopping tests")
         return 1
+    
+    # Test SAM API endpoint first
+    print("\n=== Testing SAM API Integration ===")
+    test_sam_api_endpoint(tester)
     
     # Test pricing information
     print("\n=== Testing Pricing Information ===")
@@ -399,6 +438,68 @@ def main():
     print("\n=== Testing Get All Employees ===")
     tester.test_get_employees()
     
+    # Test SAM verification for the first employee
+    print("\n=== Testing SAM Verification with Updated Integration ===")
+    if employee_ids:
+        test_employee_id = employee_ids[0]
+        success, results = tester.test_verify_employee(test_employee_id, ["sam"])
+        if success:
+            print(f"SAM verification initiated for employee ID: {test_employee_id}")
+            
+            # Wait for verification to complete
+            print("Waiting for SAM verification to complete...")
+            time.sleep(3)
+            
+            # Check verification results
+            success, results = tester.test_get_employee_verification_results(test_employee_id)
+            if success:
+                sam_results = [r for r in results if r.get('verification_type') == 'sam']
+                
+                if sam_results:
+                    for result in sam_results:
+                        employee_name = next((f"{emp['first_name']} {emp['last_name']}" 
+                                             for emp in tester.created_employees 
+                                             if emp['id'] == test_employee_id), "Unknown")
+                        
+                        status = result.get('status')
+                        print(f"\nEmployee: {employee_name} (ID: {test_employee_id})")
+                        print(f"SAM Verification Status: {status.upper()}")
+                        
+                        # Check for error message about API limitation
+                        error_message = result.get('error_message')
+                        if error_message:
+                            print(f"Error Message: {error_message}")
+                            
+                            # Check if the error message mentions API V4 limitation
+                            if "API V4 only provides bulk downloads" in error_message:
+                                print("✅ SAM API limitation correctly reported")
+                            else:
+                                print("❌ SAM API limitation not correctly reported")
+                        
+                        # Check for detailed results
+                        results_data = result.get('results', {})
+                        
+                        # Check for API limitation info
+                        api_limitation = results_data.get('api_limitation')
+                        if api_limitation:
+                            print(f"API Limitation: {api_limitation}")
+                        
+                        # Check for recommendation
+                        recommendation = results_data.get('recommendation')
+                        if recommendation:
+                            print(f"Recommendation: {recommendation}")
+                        
+                        # Check for API response summary
+                        api_response = results_data.get('api_response_summary')
+                        if api_response:
+                            print("\nAPI Response Summary:")
+                            print(f"  Status Code: {api_response.get('status_code')}")
+                            print(f"  API Version: {api_response.get('api_version')}")
+                            print(f"  Endpoint: {api_response.get('endpoint')}")
+                            print(f"  Response Type: {api_response.get('response_type')}")
+                else:
+                    print(f"No SAM verification results found for employee ID: {test_employee_id}")
+    
     # Test OIG verification for each employee
     print("\n=== Testing OIG Verification with Real Data ===")
     
@@ -412,80 +513,9 @@ def main():
     print("\nWaiting for background tasks to complete...")
     time.sleep(3)
     
-    # Check verification results for each employee
-    print("\n=== Analyzing OIG Verification Results ===")
-    
-    for employee_id in employee_ids:
-        success, results = tester.test_get_employee_verification_results(employee_id)
-        
-        if success:
-            oig_results = [r for r in results if r.get('verification_type') == 'oig']
-            
-            if oig_results:
-                for result in oig_results:
-                    employee_name = next((f"{emp['first_name']} {emp['last_name']}" 
-                                         for emp in tester.created_employees 
-                                         if emp['id'] == employee_id), "Unknown")
-                    
-                    status = result.get('status')
-                    print(f"\nEmployee: {employee_name} (ID: {employee_id})")
-                    print(f"OIG Verification Status: {status.upper()}")
-                    
-                    # Check for detailed match information
-                    results_data = result.get('results', {})
-                    excluded = results_data.get('excluded', False)
-                    
-                    if excluded:
-                        print("⚠️ EXCLUSION FOUND - Employee is on the OIG exclusion list!")
-                        
-                        # Print match details
-                        match_details = results_data.get('match_details', [])
-                        if match_details:
-                            print("\nMatch Details:")
-                            for i, match in enumerate(match_details, 1):
-                                print(f"  Match #{i}:")
-                                print(f"  - Name: {match.get('name', 'N/A')}")
-                                print(f"  - Exclusion Type: {match.get('exclusion_type', 'N/A')}")
-                                print(f"  - Exclusion Date: {match.get('exclusion_date', 'N/A')}")
-                                print(f"  - Address: {match.get('address', 'N/A')}")
-                                print(f"  - Match Score: {match.get('match_score', 'N/A')}")
-                                if match.get('business_name'):
-                                    print(f"  - Business Name: {match.get('business_name', 'N/A')}")
-                                if match.get('specialty'):
-                                    print(f"  - Specialty: {match.get('specialty', 'N/A')}")
-                                if match.get('npi'):
-                                    print(f"  - NPI: {match.get('npi', 'N/A')}")
-                        
-                        # Print database info
-                        db_info = results_data.get('database_info', {})
-                        if db_info:
-                            print(f"\nDatabase Information:")
-                            print(f"  - Total Exclusions: {db_info.get('total_exclusions_in_database', 'N/A')}")
-                            print(f"  - Source: {db_info.get('source', 'N/A')}")
-                    else:
-                        print("✅ No exclusions found - Employee passed OIG verification")
-                        
-                        # Print search criteria
-                        search_criteria = results_data.get('search_criteria', {})
-                        if search_criteria:
-                            print(f"\nSearch Criteria:")
-                            print(f"  - First Name: {search_criteria.get('first_name', 'N/A')}")
-                            print(f"  - Last Name: {search_criteria.get('last_name', 'N/A')}")
-                            if search_criteria.get('middle_name'):
-                                print(f"  - Middle Name: {search_criteria.get('middle_name', 'N/A')}")
-                        
-                        # Print database info
-                        db_info = results_data.get('database_info', {})
-                        if db_info:
-                            print(f"\nDatabase Information:")
-                            print(f"  - Total Exclusions: {db_info.get('total_exclusions_in_database', 'N/A')}")
-                            print(f"  - Source: {db_info.get('source', 'N/A')}")
-            else:
-                print(f"No OIG verification results found for employee ID: {employee_id}")
-    
-    # Test batch verification
-    print("\n=== Testing Batch OIG Verification ===")
-    tester.test_batch_verification(employee_ids, ["oig"])
+    # Test batch verification with both OIG and SAM
+    print("\n=== Testing Batch Verification with OIG and SAM ===")
+    tester.test_batch_verification(employee_ids, ["oig", "sam"])
     
     # Wait for batch verification to complete
     print("\nWaiting for batch verification to complete...")
@@ -496,26 +526,41 @@ def main():
     success, all_results = tester.test_get_verification_results()
     
     if success:
+        # Separate OIG and SAM results
         oig_results = [r for r in all_results if r.get('verification_type') == 'oig']
+        sam_results = [r for r in all_results if r.get('verification_type') == 'sam']
         
-        # Count results by status
-        status_counts = {}
+        # Count OIG results by status
+        oig_status_counts = {}
         for result in oig_results:
             status = result.get('status')
-            status_counts[status] = status_counts.get(status, 0) + 1
+            oig_status_counts[status] = oig_status_counts.get(status, 0) + 1
         
         print("\nOIG Verification Results Summary:")
-        for status, count in status_counts.items():
+        for status, count in oig_status_counts.items():
             print(f"  - {status.upper()}: {count}")
         
-        # Count exclusions found
-        exclusions_found = sum(1 for r in oig_results if r.get('results', {}).get('excluded', False))
-        print(f"\nTotal OIG Exclusions Found: {exclusions_found}")
+        # Count SAM results by status
+        sam_status_counts = {}
+        for result in sam_results:
+            status = result.get('status')
+            sam_status_counts[status] = sam_status_counts.get(status, 0) + 1
         
-        # Check database size
-        if oig_results:
-            db_size = oig_results[0].get('results', {}).get('database_info', {}).get('total_exclusions_in_database', 'Unknown')
-            print(f"OIG Database Size: {db_size} exclusions")
+        print("\nSAM Verification Results Summary:")
+        for status, count in sam_status_counts.items():
+            print(f"  - {status.upper()}: {count}")
+        
+        # Check if SAM results have error status with API limitation message
+        sam_api_limitation_count = sum(1 for r in sam_results if 
+                                      r.get('status') == 'error' and 
+                                      "API V4 only provides bulk downloads" in (r.get('error_message') or ""))
+        
+        print(f"\nSAM API Limitation Messages: {sam_api_limitation_count} out of {len(sam_results)}")
+        
+        if sam_api_limitation_count > 0:
+            print("✅ SAM API limitation correctly reported in batch verification")
+        else:
+            print("❌ SAM API limitation not correctly reported in batch verification")
     
     # Test updating subscription
     if tester.subscription_data:
