@@ -203,6 +203,193 @@ async def download_oig_data():
         logger.error(f"Error downloading OIG data: {e}")
         return False
 
+async def download_sam_data():
+    """Download the latest SAM exclusion data using the bulk download API"""
+    try:
+        sam_api_key = os.environ.get('SAM_API_KEY')
+        if not sam_api_key:
+            logger.error("SAM API key not configured for bulk download")
+            return False
+        
+        logger.info("Initiating SAM bulk exclusion data download...")
+        
+        # Step 1: Request bulk download from SAM API V4
+        base_url = "https://api.sam.gov/entity-information/v4/exclusions"
+        params = {
+            "api_key": sam_api_key,
+            "classification": "Individual",  # Only get individuals
+            "isActive": "Y",  # Only active exclusions
+            "format": "csv"  # Request CSV format for easier parsing
+        }
+        
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            # Request the bulk download
+            response = await client.get(base_url, params=params)
+            
+            if response.status_code == 200:
+                # SAM API V4 returns download instructions
+                response_text = response.text
+                
+                if "Extract File will be available for download" in response_text:
+                    # Extract the download URL from the response
+                    import re
+                    url_match = re.search(r'https://api\.sam\.gov/entity-information/v4/download-exclusions\?[^\\s]+', response_text)
+                    
+                    if url_match:
+                        download_url = url_match.group(0)
+                        # Replace the placeholder API key with actual key
+                        download_url = download_url.replace("REPLACE_WITH_API_KEY", sam_api_key)
+                        
+                        logger.info(f"SAM download URL obtained: {download_url[:100]}...")
+                        
+                        # Step 2: Wait a bit for file preparation (SAM usually takes 30-60 seconds)
+                        logger.info("Waiting for SAM file preparation (60 seconds)...")
+                        await asyncio.sleep(60)
+                        
+                        # Step 3: Download the actual data file
+                        logger.info("Downloading SAM exclusion data file...")
+                        download_response = await client.get(download_url, timeout=300.0)
+                        
+                        if download_response.status_code == 200:
+                            # Save the SAM data to local file
+                            async with aiofiles.open(SAM_DATA_FILE, 'wb') as f:
+                                await f.write(download_response.content)
+                            
+                            logger.info(f"SAM data downloaded successfully: {len(download_response.content)} bytes")
+                            
+                            # Load data into memory for faster searches
+                            await load_sam_data_to_memory()
+                            return True
+                        else:
+                            logger.error(f"Failed to download SAM data file: HTTP {download_response.status_code}")
+                            return False
+                    else:
+                        logger.error("Could not extract download URL from SAM API response")
+                        return False
+                else:
+                    logger.error("Unexpected response format from SAM API")
+                    return False
+            else:
+                logger.error(f"Failed to request SAM bulk download: HTTP {response.status_code}")
+                logger.error(f"Response: {response.text[:500]}")
+                return False
+                
+    except Exception as e:
+        logger.error(f"Error downloading SAM data: {e}")
+        return False
+
+async def load_sam_data_to_memory():
+    """Load SAM exclusion data into memory for fast searches"""
+    global sam_exclusions_cache
+    
+    if not SAM_DATA_FILE.exists():
+        logger.warning("SAM data file not found, attempting to download...")
+        if not await download_sam_data():
+            return False
+    
+    try:
+        logger.info("Loading SAM exclusion data into memory...")
+        exclusions = []
+        
+        async with aiofiles.open(SAM_DATA_FILE, mode='r', encoding='utf-8') as f:
+            content = await f.read()
+            
+        # Parse CSV content - SAM format may be different from OIG
+        csv_reader = csv.DictReader(io.StringIO(content))
+        
+        for row in csv_reader:
+            # Normalize SAM data format (fields may vary)
+            exclusion = {
+                'exclusion_name': row.get('exclusionName', '').strip().upper(),
+                'first_name': row.get('firstName', '').strip().upper(),
+                'last_name': row.get('lastName', '').strip().upper(),
+                'middle_name': row.get('middleName', '').strip().upper(),
+                'exclusion_type': row.get('exclusionType', '').strip(),
+                'exclusion_program': row.get('exclusionProgram', '').strip(),
+                'excluding_agency': row.get('excludingAgencyName', '').strip(),
+                'activation_date': row.get('activationDate', '').strip(),
+                'termination_date': row.get('terminationDate', '').strip(),
+                'sam_number': row.get('samNumber', '').strip(),
+                'cage_code': row.get('cageCode', '').strip(),
+                'classification': row.get('classification', '').strip(),
+                'address_line1': row.get('addressLine1', '').strip(),
+                'city': row.get('city', '').strip(),
+                'state_province': row.get('stateProvince', '').strip(),
+                'zip_code': row.get('zipCode', '').strip(),
+                'country': row.get('country', '').strip()
+            }
+            
+            # Only include individuals (filter out companies)
+            if exclusion['classification'].upper() in ['INDIVIDUAL', 'PERSON', '']:
+                exclusions.append(exclusion)
+        
+        sam_exclusions_cache = exclusions
+        logger.info(f"Loaded {len(exclusions)} SAM exclusions into memory")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error loading SAM data: {e}")
+        return False
+
+def search_sam_exclusions(first_name, last_name, middle_name=None):
+    """Search SAM exclusions for matching individuals"""
+    matches = []
+    
+    if not sam_exclusions_cache:
+        logger.warning("SAM data not loaded in memory")
+        return matches
+    
+    # Normalize search terms
+    search_first = normalize_name(first_name)
+    search_last = normalize_name(last_name)
+    search_middle = normalize_name(middle_name) if middle_name else ""
+    
+    for exclusion in sam_exclusions_cache:
+        match_score = 0
+        
+        # Method 1: Check individual name fields if available
+        if exclusion['first_name'] and exclusion['last_name']:
+            if (exclusion['first_name'] == search_first and 
+                exclusion['last_name'] == search_last):
+                
+                match_score = 100  # Exact first + last name match
+                
+                # Check middle name if provided
+                if search_middle and exclusion['middle_name']:
+                    if exclusion['middle_name'] == search_middle:
+                        match_score = 100  # Perfect match
+                    elif exclusion['middle_name'].startswith(search_middle) or search_middle.startswith(exclusion['middle_name']):
+                        match_score = 95   # Partial middle name match
+                    else:
+                        match_score = 85   # Different middle name
+        
+        # Method 2: Check full name field (exclusion_name)
+        elif exclusion['exclusion_name']:
+            full_search_name = f"{search_first} {search_last}"
+            full_search_name_with_middle = f"{search_first} {search_middle} {search_last}" if search_middle else full_search_name
+            
+            # Check if our search name is in the exclusion name
+            if full_search_name in exclusion['exclusion_name']:
+                match_score = 90
+            elif search_middle and full_search_name_with_middle in exclusion['exclusion_name']:
+                match_score = 95
+            elif (search_first in exclusion['exclusion_name'] and 
+                  search_last in exclusion['exclusion_name']):
+                match_score = 80
+        
+        # Only include high-confidence matches
+        if match_score >= 80:
+            matches.append({
+                'exclusion': exclusion,
+                'match_score': match_score,
+                'match_type': 'name_match'
+            })
+    
+    # Sort by match score (highest first)
+    matches.sort(key=lambda x: x['match_score'], reverse=True)
+    
+    return matches
+
 # In-memory OIG data storage for fast searches
 oig_exclusions_cache = []
 
