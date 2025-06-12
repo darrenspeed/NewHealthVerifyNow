@@ -316,7 +316,7 @@ class HealthVerifyTester:
         return success, response
 
 def test_sam_api_endpoint(tester):
-    """Test the SAM API test endpoint"""
+    """Test the SAM API test endpoint with new bulk download integration"""
     print("\n=== Testing SAM API Test Endpoint ===")
     success, response = tester.run_test(
         "SAM API Test Endpoint",
@@ -326,27 +326,48 @@ def test_sam_api_endpoint(tester):
     )
     
     if success:
-        print("SAM API Test Results:")
-        print(f"API Key Configured: {response.get('api_key_configured', False)}")
-        print(f"Endpoints Tested: {response.get('endpoints_tested', 0)}")
+        print("\nSAM API Test Results:")
         
-        # Analyze each endpoint result
-        for i, result in enumerate(response.get('results', []), 1):
-            print(f"\nEndpoint #{i}: {result.get('endpoint')}")
-            print(f"  Status Code: {result.get('status_code')}")
-            print(f"  Content Type: {result.get('content_type')}")
-            print(f"  Is Download Response: {result.get('is_download_response', False)}")
-            print(f"  Is JSON: {result.get('is_json', False)}")
-            
-            if 'error' in result:
-                print(f"  Error: {result.get('error')}")
-            elif result.get('is_json', False):
-                print(f"  Has Exclusion Details: {result.get('has_exclusion_details', False)}")
-                print(f"  Total Records: {result.get('total_records', 'unknown')}")
-            
-            # Show a sample of the response
-            if result.get('response_sample'):
-                print(f"  Response Sample: {result.get('response_sample')[:100]}...")
+        # Check verification system status
+        verification_status = response.get('verification_system_status', {})
+        
+        # Check OIG database status
+        oig_db = verification_status.get('oig_database', {})
+        print(f"\nOIG Database Status:")
+        print(f"  Loaded: {oig_db.get('loaded', False)}")
+        print(f"  Exclusions Count: {oig_db.get('exclusions_count', 0)}")
+        print(f"  Source: {oig_db.get('source', 'Unknown')}")
+        print(f"  Method: {oig_db.get('method', 'Unknown')}")
+        
+        # Check SAM database status
+        sam_db = verification_status.get('sam_database', {})
+        print(f"\nSAM Database Status:")
+        print(f"  Loaded: {sam_db.get('loaded', False)}")
+        print(f"  Exclusions Count: {sam_db.get('exclusions_count', 0)}")
+        print(f"  Source: {sam_db.get('source', 'Unknown')}")
+        print(f"  Method: {sam_db.get('method', 'Unknown')}")
+        
+        # Check SAM API info
+        sam_api_info = response.get('sam_api_info', {})
+        print(f"\nSAM API Information:")
+        print(f"  API Key Configured: {sam_api_info.get('api_key_configured', False)}")
+        print(f"  API Key Partial: {sam_api_info.get('api_key_partial', 'None')}")
+        print(f"  Bulk Download Capability: {sam_api_info.get('bulk_download_capability', 'Unknown')}")
+        print(f"  Real-time Search: {sam_api_info.get('real_time_search', 'Unknown')}")
+        
+        # Check system capabilities
+        capabilities = response.get('system_capabilities', {})
+        print(f"\nSystem Capabilities:")
+        print(f"  OIG Verification: {capabilities.get('oig_verification', 'Unknown')}")
+        print(f"  SAM Verification: {capabilities.get('sam_verification', 'Unknown')}")
+        print(f"  Batch Verification: {capabilities.get('batch_verification', 'Unknown')}")
+        
+        # Check recommendations
+        recommendations = response.get('recommendations', {})
+        if recommendations:
+            print(f"\nRecommendations:")
+            for key, value in recommendations.items():
+                print(f"  {key.replace('_', ' ').title()}: {value}")
     
     return success, response
 
