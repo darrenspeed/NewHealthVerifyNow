@@ -372,6 +372,36 @@ async def scheduled_data_updates():
     
     logger.info(f"🔄 Scheduled update completed. OIG: {oig_success}, SAM: {sam_success}")
 
+@api_router.get("/admin/update-history")
+async def get_update_history():
+    """Get history of data updates"""
+    try:
+        # Get recent update records
+        updates = await db.data_updates.find().sort("timestamp", -1).limit(10).to_list(10)
+        
+        current_status = {
+            "oig_loaded": len(oig_exclusions_cache) > 0,
+            "sam_loaded": len(sam_exclusions_cache) > 0,
+            "oig_count": len(oig_exclusions_cache),
+            "sam_count": len(sam_exclusions_cache),
+            "last_startup": datetime.utcnow().isoformat()
+        }
+        
+        return {
+            "current_status": current_status,
+            "recent_updates": updates,
+            "update_schedule": "Every 24 hours",
+            "next_scheduled_update": (datetime.utcnow() + timedelta(hours=24)).isoformat()
+        }
+        
+    except Exception as e:
+        return {"error": str(e), "error_type": type(e).__name__}
+
+@api_router.get("/pricing")
+async def get_pricing():
+    """Get pricing tiers"""
+    return {"pricing_tiers": get_pricing_tiers()}
+
 def run_scheduled_updates():
     """Background thread function to run scheduled updates"""
     while True:
