@@ -674,25 +674,42 @@ async def create_subscription(
                 detail="User already has an active subscription"
             )
         
-        # Simple PayPal Payment Button Approach
         try:
+            # Get PayPal configuration
+            paypal_business_email = os.environ.get('PAYPAL_BUSINESS_EMAIL')
+            is_sandbox = os.environ.get('PAYPAL_MODE', 'sandbox').lower() == 'sandbox'
+            
+            # Validate business email exists
+            if not paypal_business_email:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="PayPal business email not configured"
+                )
+            
             # Calculate total monthly cost
             total_monthly_cost = monthly_cost
-            
-            # Create a simple PayPal payment link for the monthly subscription
-            # Using PayPal's simple payment links (no complex API required)
             
             # Generate a unique payment reference
             payment_reference = f"HVN-{current_user.id[:8]}-{subscription_data.employee_count}-{datetime.utcnow().strftime('%Y%m%d')}"
             
-            # Create PayPal payment URL (this is the simple approach)
+            # Use appropriate PayPal URL (sandbox vs production)
+            if is_sandbox:
+                paypal_base_url = "https://www.sandbox.paypal.com/cgi-bin/webscr"
+            else:
+                paypal_base_url = "https://www.paypal.com/cgi-bin/webscr"
+            
+            # Create PayPal payment URL for recurring payments
             paypal_payment_url = (
-                f"https://www.paypal.com/cgi-bin/webscr?"
-                f"cmd=_xclick&"
-                f"business={os.environ.get('PAYPAL_BUSINESS_EMAIL', 'your-business@paypal.com')}&"
+                f"{paypal_base_url}?"
+                f"cmd=_xclick-subscriptions&"
+                f"business={paypal_business_email}&"
                 f"item_name=Health Verify Now - {plan_name} Plan ({subscription_data.employee_count} employees)&"
-                f"amount={total_monthly_cost:.2f}&"
                 f"currency_code=USD&"
+                f"a3={total_monthly_cost:.2f}&"  # Subscription amount
+                f"p3=1&"  # Billing cycle
+                f"t3=M&"  # Billing cycle unit (M = month)
+                f"src=1&"  # Recurring payments
+                f"sra=1&"  # Re-attempt on failure
                 f"custom={payment_reference}&"
                 f"return=https://www.healthverifynow.com/payment/success&"
                 f"cancel_return=https://www.healthverifynow.com/payment/cancel&"
@@ -709,8 +726,10 @@ async def create_subscription(
                 'payment_reference': payment_reference
             }
             
-            logger.info(f"Created PayPal payment link for customer: {current_user.email}")
+            logger.info(f"Created PayPal subscription link for customer: {current_user.email}")
             logger.info(f"Amount: ${total_monthly_cost}, Plan: {plan_name}, Reference: {payment_reference}")
+            logger.info(f"Using PayPal business email: {paypal_business_email}")
+            logger.info(f"Sandbox mode: {is_sandbox}")
             
         except Exception as e:
             logger.error(f"Error creating PayPal payment link: {e}")
