@@ -206,6 +206,9 @@ async def download_oig_data():
 # In-memory OIG data storage for fast searches
 oig_exclusions_cache = []
 
+# In-memory SAM data storage for fast searches
+sam_exclusions_cache = []
+
 async def load_oig_data_to_memory():
     """Load OIG exclusion data into memory for fast searches"""
     global oig_exclusions_cache
