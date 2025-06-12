@@ -174,6 +174,9 @@ class BatchVerificationRequest(BaseModel):
 OIG_DATA_FILE = ROOT_DIR / "oig_exclusions.csv"
 OIG_DOWNLOAD_URL = "https://oig.hhs.gov/exclusions/downloadables/UPDATED.csv"
 
+# SAM Exclusion Check Functions
+SAM_DATA_FILE = ROOT_DIR / "sam_exclusions.csv"
+
 async def download_oig_data():
     """Download the latest OIG exclusion list from HHS.gov"""
     try:
