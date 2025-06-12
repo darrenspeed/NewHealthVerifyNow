@@ -1943,9 +1943,13 @@ async def startup_event():
     else:
         logger.warning("⚠️ Failed to load SAM exclusion database - will attempt download on first check")
     
+    # Start background data updates
+    start_background_updates()
+    
     logger.info("🚀 Health Verify Now API ready for commercial use!")
     logger.info("   - OIG verification: Real-time searches against downloaded database")
     logger.info("   - SAM verification: Real-time searches against downloaded database")
+    logger.info("   - Scheduled updates: Every 24 hours for data freshness")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
