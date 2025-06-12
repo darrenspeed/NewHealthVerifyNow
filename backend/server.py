@@ -752,10 +752,97 @@ async def test_sam_api():
     except Exception as e:
         return {"error": str(e), "error_type": type(e).__name__}
 
-@api_router.get("/pricing")
-async def get_pricing():
-    """Get pricing tiers"""
-    return {"pricing_tiers": get_pricing_tiers()}
+@api_router.get("/admin/sam-status")
+async def check_sam_status():
+    """Admin endpoint to check SAM API status and attempt manual download"""
+    try:
+        sam_api_key = os.environ.get('SAM_API_KEY')
+        if not sam_api_key:
+            return {"error": "SAM API key not configured"}
+        
+        # Check current local status
+        local_status = {
+            "sam_loaded": len(sam_exclusions_cache) > 0,
+            "exclusions_count": len(sam_exclusions_cache),
+            "last_successful_download": None  # Could store this in database
+        }
+        
+        # Test SAM API connectivity
+        base_url = "https://api.sam.gov/entity-information/v4/exclusions"
+        params = {
+            "api_key": sam_api_key,
+            "classification": "Individual",
+            "isActive": "Y",
+            "format": "csv"
+        }
+        
+        api_status = {}
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                response = await client.get(base_url, params=params)
+                
+                api_status = {
+                    "api_available": response.status_code == 200,
+                    "status_code": response.status_code,
+                    "response_indicates_download": "Extract File will be available" in response.text,
+                    "last_checked": datetime.utcnow().isoformat()
+                }
+                
+                # If API is working, extract download URL
+                if response.status_code == 200 and "Extract File will be available" in response.text:
+                    import re
+                    url_match = re.search(r'https://api\.sam\.gov/entity-information/v4/download-exclusions\?[^\\s]+', response.text)
+                    if url_match:
+                        api_status["download_url_available"] = True
+                        api_status["estimated_file_ready_time"] = (datetime.utcnow() + timedelta(seconds=60)).isoformat()
+                    else:
+                        api_status["download_url_available"] = False
+                
+            except Exception as e:
+                api_status = {
+                    "api_available": False,
+                    "error": str(e),
+                    "last_checked": datetime.utcnow().isoformat()
+                }
+        
+        return {
+            "local_database": local_status,
+            "sam_api_status": api_status,
+            "recommendations": {
+                "if_api_working": "Call /admin/download-sam to manually trigger download",
+                "monitoring": "Check this endpoint periodically to monitor API status",
+                "automation": "Consider implementing scheduled checks"
+            }
+        }
+        
+    except Exception as e:
+        return {"error": str(e), "error_type": type(e).__name__}
+
+@api_router.post("/admin/download-sam")
+async def manual_sam_download():
+    """Admin endpoint to manually trigger SAM data download"""
+    try:
+        # Attempt to download SAM data
+        success = await download_sam_data()
+        
+        return {
+            "download_attempted": True,
+            "success": success,
+            "sam_loaded": len(sam_exclusions_cache) > 0,
+            "exclusions_count": len(sam_exclusions_cache),
+            "timestamp": datetime.utcnow().isoformat(),
+            "message": "SAM data downloaded successfully" if success else "SAM download failed - check logs for details"
+        }
+        
+    except Exception as e:
+        logger.error(f"Manual SAM download failed: {e}")
+        return {
+            "download_attempted": True,
+            "success": False,
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        }
 
 # ========== AUTHENTICATION ROUTES ==========
 
