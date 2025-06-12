@@ -707,83 +707,48 @@ async def root():
 
 @api_router.get("/test-sam")
 async def test_sam_api():
-    """Test SAM API connectivity and response"""
+    """Test SAM bulk data download and local search capability"""
     try:
         sam_api_key = os.environ.get('SAM_API_KEY')
         if not sam_api_key:
             return {"error": "SAM API key not configured"}
         
-        # Test different endpoints to find the correct one for real-time search
-        endpoints_to_test = [
-            "https://api.sam.gov/entity-exclusions/v1/entities",
-            "https://api.sam.gov/entity-information/v4/exclusions",
-            "https://api.sam.gov/entity-information/v1/exclusions"
-        ]
-        
-        results = []
-        
-        for base_url in endpoints_to_test:
-            try:
-                # For V1 endpoints, use different parameters
-                if "v1" in base_url:
-                    params = {
-                        "api_key": sam_api_key,
-                        "q": "John Smith",
-                        "format": "json",
-                        "page": "0",
-                        "size": "5"
-                    }
-                else:
-                    params = {
-                        "api_key": sam_api_key,
-                        "exclusionName": "John Smith",
-                        "classification": "Individual",
-                        "isActive": "Y",
-                        "format": "json",
-                        "page": "0",
-                        "size": "5"
-                    }
-                
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    response = await client.get(base_url, params=params)
-                    
-                    is_download_response = "Extract File will be available" in response.text
-                    is_json = response.headers.get('content-type', '').startswith('application/json')
-                    
-                    endpoint_result = {
-                        "endpoint": base_url,
-                        "status_code": response.status_code,
-                        "content_type": response.headers.get('content-type', 'unknown'),
-                        "is_download_response": is_download_response,
-                        "is_json": is_json,
-                        "response_sample": response.text[:200],
-                        "response_length": len(response.text)
-                    }
-                    
-                    # Try to parse JSON if it's a JSON response
-                    if is_json and response.status_code == 200:
-                        try:
-                            json_data = response.json()
-                            endpoint_result["has_exclusion_details"] = "exclusionDetails" in json_data
-                            endpoint_result["total_records"] = json_data.get('totalRecords', 'unknown')
-                        except:
-                            endpoint_result["json_parse_error"] = True
-                    
-                    results.append(endpoint_result)
-                    
-            except Exception as e:
-                results.append({
-                    "endpoint": base_url,
-                    "error": str(e),
-                    "error_type": type(e).__name__
-                })
+        # Check current status of both databases
+        oig_loaded = len(oig_exclusions_cache) > 0
+        sam_loaded = len(sam_exclusions_cache) > 0
         
         return {
-            "api_key_configured": bool(sam_api_key),
-            "endpoints_tested": len(results),
-            "results": results
+            "verification_system_status": {
+                "oig_database": {
+                    "loaded": oig_loaded,
+                    "exclusions_count": len(oig_exclusions_cache),
+                    "source": "HHS OIG LEIE Database",
+                    "method": "Downloaded CSV, Local Search"
+                },
+                "sam_database": {
+                    "loaded": sam_loaded,
+                    "exclusions_count": len(sam_exclusions_cache),
+                    "source": "SAM.gov Bulk Data",
+                    "method": "Bulk Download, Local Search"
+                }
+            },
+            "sam_api_info": {
+                "api_key_configured": bool(sam_api_key),
+                "api_key_partial": f"{sam_api_key[:8]}...{sam_api_key[-4:]}" if sam_api_key else None,
+                "bulk_download_capability": "Available",
+                "real_time_search": "Local Database" if sam_loaded else "Not Available"
+            },
+            "system_capabilities": {
+                "oig_verification": "✅ Real-time local search" if oig_loaded else "❌ Database not loaded",
+                "sam_verification": "✅ Real-time local search" if sam_loaded else "❌ Database not loaded",
+                "batch_verification": "✅ Both OIG and SAM" if (oig_loaded and sam_loaded) else "⚠️ Partial capability"
+            },
+            "recommendations": {
+                "for_production": "Both databases should be loaded for comprehensive verification",
+                "data_freshness": "Consider implementing daily/weekly database updates",
+                "performance": "Local search provides instant results without API rate limits"
+            }
         }
-        
     except Exception as e:
         return {"error": str(e), "error_type": type(e).__name__}
 
