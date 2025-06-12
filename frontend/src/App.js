@@ -6,6 +6,7 @@ import Login from "./components/Login";
 import Register from "./components/Register";
 import SubscriptionPlans from "./components/SubscriptionPlans";
 import SubscriptionDashboard from "./components/SubscriptionDashboard";
+import BatchUpload from "./components/BatchUpload";
 
 // Configure axios defaults
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
