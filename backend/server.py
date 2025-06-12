@@ -608,15 +608,16 @@ async def test_sam_api():
         if not sam_api_key:
             return {"error": "SAM API key not configured"}
         
-        # Test with a simple query
+        # Test with a specific name search
         base_url = "https://api.sam.gov/entity-information/v4/exclusions"
         params = {
             "api_key": sam_api_key,
+            "exclusionName": "John Smith",  # Common name for testing
             "classification": "Individual",
             "isActive": "Y",
             "format": "json",
             "page": "0",
-            "size": "5"
+            "size": "10"
         }
         
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -624,11 +625,17 @@ async def test_sam_api():
             
             response_data = None
             total_records = None
+            is_download_response = False
             
             if response.status_code == 200:
                 try:
-                    response_data = response.json()
-                    total_records = response_data.get('totalRecords', 0)
+                    # Check if it's a download response
+                    if "Extract File will be available" in response.text:
+                        is_download_response = True
+                        response_data = "Download response - not direct results"
+                    else:
+                        response_data = response.json()
+                        total_records = response_data.get('totalRecords', 0)
                 except Exception as json_error:
                     response_data = f"JSON parse error: {str(json_error)}"
             
@@ -636,12 +643,13 @@ async def test_sam_api():
                 "status_code": response.status_code,
                 "endpoint": base_url,
                 "api_version": "V4",
-                "response_preview": response.text[:500] if response.status_code != 200 else "Success - response parsed",
-                "response_headers": dict(response.headers),
+                "search_parameters": params,
+                "is_download_response": is_download_response,
+                "content_type": response.headers.get('content-type', 'unknown'),
                 "total_records": total_records,
                 "api_key_configured": bool(sam_api_key),
-                "api_key_partial": f"{sam_api_key[:8]}...{sam_api_key[-4:]}" if sam_api_key else None,
-                "raw_response_sample": response.text[:200] if response.status_code == 200 else None
+                "raw_response_sample": response.text[:300],
+                "response_length": len(response.text)
             }
     except Exception as e:
         return {"error": str(e), "error_type": type(e).__name__}
