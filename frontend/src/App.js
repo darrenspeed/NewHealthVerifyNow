@@ -250,7 +250,7 @@ const EmployeeList = ({ employees, onVerifyEmployee }) => {
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-bold text-gray-800">Employees ({employees.length})</h2>
+        <h2 className="text-2xl font-bold text-gray-800">🔥 TEST - Employees ({employees.length}) - CHANGES WORKING! 🔥</h2>
         
         <div className="mb-6 p-4 bg-gray-50 rounded-lg">
           <div className="mb-4">
