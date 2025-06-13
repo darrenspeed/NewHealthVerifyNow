@@ -321,8 +321,8 @@ class SAMAPITester:
             return False
     
     def test_employee_verification_with_sam(self):
-        """Test employee verification with SAM"""
-        print("\n=== Testing Employee Verification with SAM ===")
+        """Test employee verification with SAM v4 API"""
+        print("\n=== Testing Employee Verification with SAM v4 API ===")
         
         if not self.token or not self.employee_id:
             print("❌ Cannot test verification: No authentication token or employee ID")
@@ -340,7 +340,7 @@ class SAMAPITester:
                 headers=headers
             )
             
-            if response.status_code == 202:
+            if response.status_code in [200, 202]:
                 print("✅ SAM verification initiated successfully")
                 
                 # Wait for verification to complete
@@ -370,15 +370,26 @@ class SAMAPITester:
                             
                             # Check result details
                             results_data = sam_result.get('results', {})
-                            database_info = results_data.get('database_info', {})
                             
-                            print(f"  Database info:")
-                            print(f"    Total exclusions: {database_info.get('total_exclusions_in_database', 0)}")
-                            print(f"    Source: {database_info.get('source', 'Unknown')}")
-                            print(f"    Method: {database_info.get('verification_method', 'Unknown')}")
+                            # Check for v4 API specific fields
+                            api_response_summary = results_data.get('api_response_summary', {})
+                            api_version = api_response_summary.get('api_version')
                             
-                            self.test_results["employee_verification_with_sam"] = True
-                            return True
+                            if api_version == 'v4':
+                                print("✅ SAM v4 API was used for verification")
+                                print(f"  API Version: {api_version}")
+                                print(f"  Status Code: {api_response_summary.get('status_code')}")
+                                print(f"  Total Records: {api_response_summary.get('total_records')}")
+                                
+                                # Print some of the result details
+                                print("\nVerification result details:")
+                                print(json.dumps(results_data, indent=2)[:1000] + "..." if len(json.dumps(results_data)) > 1000 else json.dumps(results_data, indent=2))
+                                
+                                self.test_results["employee_verification_with_sam"] = True
+                                return True
+                            else:
+                                print(f"❌ SAM v4 API was NOT used for verification. API version: {api_version}")
+                                return False
                         elif status == 'error':
                             error_message = sam_result.get('error_message', 'Unknown error')
                             print(f"❌ SAM verification failed with error: {error_message}")
