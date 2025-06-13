@@ -79,5 +79,97 @@ def calculate_monthly_cost(employee_count: int) -> tuple[str, float]:
     return "Starter", employee_count * 4.95
 
 def get_pricing_tiers():
-    """Get all pricing tiers for display"""
-    return PRICING_TIERS
+    """Get pricing tiers for Health Verify Now - Complete Credentialing Platform"""
+    return [
+        {
+            "name": "Basic Exclusions",
+            "description": "Federal exclusion checks only (OIG + SAM)",
+            "price_per_employee": 29,
+            "min_employees": 1,
+            "max_employees": 50,
+            "features": [
+                "OIG Exclusion Verification",
+                "SAM Exclusion Verification", 
+                "Basic Reporting",
+                "Email Support"
+            ],
+            "verification_types": ["oig", "sam"],
+            "recommended": False
+        },
+        {
+            "name": "Professional Credentialing", 
+            "description": "Exclusions + License Verification",
+            "price_per_employee": 89,
+            "min_employees": 1,
+            "max_employees": 100,
+            "features": [
+                "All Basic Exclusions",
+                "NPI Registry Verification",
+                "State Medical License Verification",
+                "State Nursing License Verification", 
+                "Professional Reporting",
+                "Priority Email Support"
+            ],
+            "verification_types": ["oig", "sam", "npi", "license_md_ca", "license_rn_ca"],
+            "recommended": True,
+            "badge": "Most Popular"
+        },
+        {
+            "name": "Complete Background Check",
+            "description": "Exclusions + Licenses + Criminal Background",
+            "price_per_employee": 149,
+            "min_employees": 1,
+            "max_employees": 200,
+            "features": [
+                "All Professional Credentialing",
+                "National Sex Offender Registry",
+                "FBI Most Wanted Database",
+                "State Criminal Records",
+                "Comprehensive Reporting",
+                "Phone & Email Support"
+            ],
+            "verification_types": ["oig", "sam", "npi", "license_md_ca", "license_rn_ca", "nsopw_national", "fbi_wanted"],
+            "recommended": False
+        },
+        {
+            "name": "Enterprise Credentialing",
+            "description": "Complete credentialing + State Medicaid + HIPAA",
+            "price_per_employee": 249,
+            "min_employees": 51,
+            "max_employees": 1000,
+            "features": [
+                "All Complete Background Check",
+                "State Medicaid Exclusion Checks",
+                "Multi-State License Verification",
+                "HIPAA-Compliant Reporting",
+                "Audit Trail & Compliance",
+                "Dedicated Account Manager",
+                "API Access",
+                "Custom Integrations"
+            ],
+            "verification_types": ["oig", "sam", "npi", "license_md_ca", "license_md_tx", "license_rn_ca", "license_rn_tx", "nsopw_national", "fbi_wanted", "medicaid_ca", "medicaid_tx"],
+            "recommended": False,
+            "badge": "Enterprise"
+        },
+        {
+            "name": "Healthcare System",
+            "description": "Complete platform for large healthcare organizations",
+            "price_per_employee": 399,
+            "min_employees": 201,
+            "max_employees": None,
+            "features": [
+                "All Enterprise Features",
+                "All State License Verifications",
+                "All State Medicaid Checks", 
+                "Real-time API Access",
+                "Custom Reporting Dashboard",
+                "White-label Options",
+                "24/7 Priority Support",
+                "On-site Training",
+                "Custom Compliance Reporting"
+            ],
+            "verification_types": "all",
+            "recommended": False,
+            "badge": "Complete Solution"
+        }
+    ]
