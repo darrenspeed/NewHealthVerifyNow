@@ -275,6 +275,125 @@ state_medicaid_cache = {
     "NY": []
 }
 
+# Free License Verification Configuration
+FREE_LICENSE_CONFIG = {
+    "NPI": {
+        "name": "National Provider Identifier Registry",
+        "api_url": "https://npiregistry.cms.hhs.gov/api/",
+        "method": "api_lookup",
+        "scope": "National",
+        "enabled": True,
+        "provider_types": ["Individual", "Organization"]
+    },
+    "CA_MEDICAL": {
+        "name": "California Medical Board",
+        "lookup_url": "https://www.mbc.ca.gov/breeze/license_lookup/",
+        "data_file": ROOT_DIR / "license_ca_medical.csv",
+        "method": "web_scraping",
+        "license_types": ["MD", "DO"],
+        "enabled": True
+    },
+    "TX_MEDICAL": {
+        "name": "Texas Medical Board", 
+        "lookup_url": "https://www.tmb.state.tx.us/page/lookup-license-verification",
+        "data_file": ROOT_DIR / "license_tx_medical.csv",
+        "method": "api_lookup",
+        "license_types": ["MD", "DO"],
+        "enabled": True
+    },
+    "FL_MEDICAL": {
+        "name": "Florida Department of Health - Medical",
+        "lookup_url": "https://flhealthsource.gov/verification/",
+        "data_file": ROOT_DIR / "license_fl_medical.csv", 
+        "method": "web_scraping",
+        "license_types": ["MD", "DO"],
+        "enabled": True
+    },
+    "NY_MEDICAL": {
+        "name": "New York State Education Department - Medical",
+        "lookup_url": "http://www.op.nysed.gov/opsearches.htm",
+        "data_file": ROOT_DIR / "license_ny_medical.csv",
+        "method": "web_scraping", 
+        "license_types": ["MD", "DO"],
+        "enabled": True
+    },
+    "CA_NURSING": {
+        "name": "California Board of Registered Nursing",
+        "lookup_url": "https://www.rn.ca.gov/breeze/license_lookup/",
+        "data_file": ROOT_DIR / "license_ca_nursing.csv",
+        "method": "web_scraping",
+        "license_types": ["RN", "LVN"],
+        "enabled": True
+    },
+    "TX_NURSING": {
+        "name": "Texas Board of Nursing",
+        "lookup_url": "https://www.bon.texas.gov/licensure-main-menu/license-verification.html",
+        "data_file": ROOT_DIR / "license_tx_nursing.csv",
+        "method": "web_scraping",
+        "license_types": ["RN", "LVN"],
+        "enabled": True
+    }
+}
+
+# Free Criminal Background Check Configuration  
+FREE_CRIMINAL_CONFIG = {
+    "NSOPW_NATIONAL": {
+        "name": "National Sex Offender Public Website",
+        "api_url": "https://www.nsopw.gov/api/",
+        "data_file": ROOT_DIR / "nsopw_national.csv",
+        "method": "api_download",
+        "scope": "National",
+        "enabled": True,
+        "update_frequency_days": 7
+    },
+    "FBI_WANTED": {
+        "name": "FBI Most Wanted",
+        "api_url": "https://api.fbi.gov/wanted/v1/list",
+        "data_file": ROOT_DIR / "fbi_wanted.csv", 
+        "method": "api_download",
+        "scope": "Federal",
+        "enabled": True,
+        "update_frequency_days": 1
+    },
+    "CA_SEX_OFFENDER": {
+        "name": "California Megan's Law Database",
+        "download_url": "https://www.meganslaw.ca.gov/OffenderData.aspx",
+        "data_file": ROOT_DIR / "nsopw_ca.csv",
+        "method": "bulk_download",
+        "scope": "California",
+        "enabled": True,
+        "update_frequency_days": 7
+    },
+    "TX_SEX_OFFENDER": {
+        "name": "Texas Sex Offender Registry",
+        "download_url": "https://records.txdps.state.tx.us/SexOffenderRegistry",
+        "data_file": ROOT_DIR / "nsopw_tx.csv", 
+        "method": "bulk_download",
+        "scope": "Texas",
+        "enabled": True,
+        "update_frequency_days": 7
+    }
+}
+
+# In-memory license verification data storage
+license_verification_cache = {
+    "npi": [],
+    "ca_medical": [],
+    "tx_medical": [],
+    "fl_medical": [], 
+    "ny_medical": [],
+    "ca_nursing": [],
+    "tx_nursing": []
+}
+
+# In-memory criminal background data storage
+criminal_background_cache = {
+    "nsopw_national": [],
+    "fbi_wanted": [],
+    "ca_sex_offender": [],
+    "tx_sex_offender": []
+}
+
 async def download_oig_data():
     """Download the latest OIG exclusion list from HHS.gov"""
     try:
