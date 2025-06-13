@@ -1287,6 +1287,73 @@ def search_criminal_background(first_name: str, last_name: str, date_of_birth: s
     
     return matches
 
+async def check_criminal_background(employee: Employee, verification_type: str) -> VerificationResult:
+    """Check criminal background using various databases"""
+    try:
+        # Ensure criminal background data is loaded
+        if not any(criminal_background_cache.values()):
+            logger.info("Criminal background data not in memory, loading...")
+            await download_nsopw_data()
+            await download_fbi_wanted_data()
+        
+        # Perform criminal background search
+        matches = search_criminal_background(
+            employee.first_name,
+            employee.last_name,
+            getattr(employee, 'date_of_birth', None)
+        )
+        
+        # Check for high-confidence matches
+        high_confidence_matches = [m for m in matches if m['match_score'] >= 90]
+        
+        result = VerificationResult(
+            employee_id=employee.id,
+            verification_type=verification_type,
+            status=VerificationStatus.FAILED if len(high_confidence_matches) > 0 else VerificationStatus.PASSED,
+            results={
+                "criminal_record_found": len(high_confidence_matches) > 0,
+                "total_matches_found": len(matches),
+                "high_confidence_matches": len(high_confidence_matches),
+                "match_details": [
+                    {
+                        "database": match["database"],
+                        "record_info": match.get("record_data", {}),
+                        "match_score": match["match_score"],
+                        "verification_type": match["verification_type"]
+                    }
+                    for match in high_confidence_matches[:3]
+                ],
+                "search_criteria": {
+                    "first_name": employee.first_name,
+                    "last_name": employee.last_name,
+                    "date_of_birth": getattr(employee, 'date_of_birth', 'Not provided')
+                },
+                "database_info": {
+                    "databases_searched": len([k for k, v in criminal_background_cache.items() if v]),
+                    "verification_method": "Free Public Databases",
+                    "last_updated": datetime.utcnow().isoformat()
+                }
+            },
+            data_source="Criminal Background Check Services"
+        )
+        
+        await db.verification_results.insert_one(result.dict())
+        logger.info(f"Criminal background check completed for {employee.first_name} {employee.last_name}: {result.status}")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Criminal background check failed for employee {employee.id}: {e}")
+        error_result = VerificationResult(
+            employee_id=employee.id,
+            verification_type=verification_type,
+            status=VerificationStatus.ERROR,
+            error_message=str(e),
+            data_source="Criminal Background Check Services"
+        )
+        await db.verification_results.insert_one(error_result.dict())
+        return error_result
+
 async def check_license_verification(employee: Employee, verification_type: str) -> VerificationResult:
     """Check professional license verification"""
     try:
