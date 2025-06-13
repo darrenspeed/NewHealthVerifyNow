@@ -255,7 +255,7 @@ const EmployeeList = ({ employees, onVerifyEmployee }) => {
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
             <label className="text-sm font-medium text-gray-700">Verification Types:</label>
-            <div className="flex space-x-2">
+            <div className="flex flex-wrap gap-2">
               <label className="flex items-center">
                 <input
                   type="checkbox"
@@ -269,7 +269,7 @@ const EmployeeList = ({ employees, onVerifyEmployee }) => {
                   }}
                   className="mr-1"
                 />
-                OIG
+                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">OIG</span>
               </label>
               <label className="flex items-center">
                 <input
@@ -284,7 +284,67 @@ const EmployeeList = ({ employees, onVerifyEmployee }) => {
                   }}
                   className="mr-1"
                 />
-                SAM
+                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">SAM</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={verificationTypes.includes('medicaid_ca')}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setVerificationTypes([...verificationTypes, 'medicaid_ca']);
+                    } else {
+                      setVerificationTypes(verificationTypes.filter(t => t !== 'medicaid_ca'));
+                    }
+                  }}
+                  className="mr-1"
+                />
+                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">CA Medicaid</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={verificationTypes.includes('medicaid_tx')}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setVerificationTypes([...verificationTypes, 'medicaid_tx']);
+                    } else {
+                      setVerificationTypes(verificationTypes.filter(t => t !== 'medicaid_tx'));
+                    }
+                  }}
+                  className="mr-1"
+                />
+                <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">TX Medicaid</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={verificationTypes.includes('medicaid_fl')}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setVerificationTypes([...verificationTypes, 'medicaid_fl']);
+                    } else {
+                      setVerificationTypes(verificationTypes.filter(t => t !== 'medicaid_fl'));
+                    }
+                  }}
+                  className="mr-1"
+                />
+                <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">FL Medicaid</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={verificationTypes.includes('medicaid_ny')}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setVerificationTypes([...verificationTypes, 'medicaid_ny']);
+                    } else {
+                      setVerificationTypes(verificationTypes.filter(t => t !== 'medicaid_ny'));
+                    }
+                  }}
+                  className="mr-1"
+                />
+                <span className="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded">NY Medicaid</span>
               </label>
             </div>
           </div>
