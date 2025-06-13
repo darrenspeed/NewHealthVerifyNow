@@ -643,41 +643,58 @@ def main():
     success, all_results = tester.test_get_verification_results()
     
     if success:
-        # Separate OIG and SAM results
-        oig_results = [r for r in all_results if r.get('verification_type') == 'oig']
-        sam_results = [r for r in all_results if r.get('verification_type') == 'sam']
+        # Group results by verification type
+        verification_types = {
+            "Federal Exclusions": ["oig", "sam"],
+            "State Medicaid": ["medicaid_ca", "medicaid_tx", "medicaid_fl", "medicaid_ny"],
+            "License Verification": ["npi", "license_md_ca", "license_rn_ca"],
+            "Criminal Background": ["nsopw_national", "fbi_wanted"]
+        }
         
-        # Count OIG results by status
-        oig_status_counts = {}
-        for result in oig_results:
-            status = result.get('status')
-            oig_status_counts[status] = oig_status_counts.get(status, 0) + 1
+        # Count results by category and status
+        category_status_counts = {}
         
-        print("\nOIG Verification Results Summary:")
-        for status, count in oig_status_counts.items():
-            print(f"  - {status.upper()}: {count}")
+        for category, types in verification_types.items():
+            category_results = [r for r in all_results if r.get('verification_type') in types]
+            status_counts = {}
+            
+            for result in category_results:
+                status = result.get('status')
+                status_counts[status] = status_counts.get(status, 0) + 1
+            
+            category_status_counts[category] = {
+                "total": len(category_results),
+                "status_counts": status_counts
+            }
         
-        # Count SAM results by status
-        sam_status_counts = {}
-        for result in sam_results:
-            status = result.get('status')
-            sam_status_counts[status] = sam_status_counts.get(status, 0) + 1
+        # Print summary by category
+        for category, data in category_status_counts.items():
+            print(f"\n{category} Results Summary ({data['total']} total):")
+            for status, count in data["status_counts"].items():
+                print(f"  - {status.upper()}: {count}")
         
-        print("\nSAM Verification Results Summary:")
-        for status, count in sam_status_counts.items():
-            print(f"  - {status.upper()}: {count}")
+        # Count results by verification type
+        type_counts = {}
+        for result in all_results:
+            verification_type = result.get('verification_type')
+            type_counts[verification_type] = type_counts.get(verification_type, 0) + 1
         
-        # Check for error messages in SAM results
-        sam_error_messages = [r.get('error_message') for r in sam_results if r.get('error_message')]
-        if sam_error_messages:
-            print("\nSAM Error Messages:")
-            for msg in set(sam_error_messages):
-                count = sam_error_messages.count(msg)
+        print("\nResults by Verification Type:")
+        for verification_type, count in type_counts.items():
+            print(f"  - {verification_type.upper()}: {count}")
+        
+        # Check for error messages
+        error_messages = [r.get('error_message') for r in all_results if r.get('error_message')]
+        if error_messages:
+            print("\nError Messages:")
+            for msg in set(error_messages):
+                count = error_messages.count(msg)
                 print(f"  - {msg} ({count} occurrences)")
     
     # Check system status again after tests
     print("\n=== Checking System Status After Tests ===")
-    test_sam_api_endpoint(tester)
+    test_verification_system_status(tester)
+    
     
     # Print results
     print(f"\n📊 Tests passed: {tester.tests_passed}/{tester.tests_run}")
