@@ -107,6 +107,13 @@ class VerificationType(str, Enum):
     NSOPW = "nsopw"  # National Sex Offender Public Website
     LICENSE = "license"
     CRIMINAL = "criminal"
+    # State Medicaid Exclusions
+    MEDICAID_CA = "medicaid_ca"  # California Medi-Cal
+    MEDICAID_TX = "medicaid_tx"  # Texas Medicaid
+    MEDICAID_FL = "medicaid_fl"  # Florida Medicaid
+    MEDICAID_NY = "medicaid_ny"  # New York Medicaid
+    MEDICAID_IL = "medicaid_il"  # Illinois Medicaid
+    MEDICAID_PA = "medicaid_pa"  # Pennsylvania Medicaid
 
 # Models
 class Employee(BaseModel):
