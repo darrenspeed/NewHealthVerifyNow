@@ -372,6 +372,104 @@ def test_sam_api_endpoint(tester):
     
     return success, response
 
+def test_verification_system_status(tester):
+    """Test the verification system status endpoint"""
+    print("\n=== Testing Verification System Status ===")
+    success, response = tester.run_test(
+        "Verification System Status",
+        "GET",
+        "api/verification-system-status",
+        200
+    )
+    
+    if success:
+        print("\nVerification System Status:")
+        
+        # System Overview
+        system_overview = response.get('system_overview', {})
+        print(f"\nSystem Overview:")
+        print(f"  Platform: {system_overview.get('platform', 'Unknown')}")
+        print(f"  Version: {system_overview.get('version', 'Unknown')}")
+        print(f"  Capabilities: {system_overview.get('capabilities', 'Unknown')}")
+        
+        # Federal Exclusions
+        federal_exclusions = response.get('federal_exclusions', {})
+        print(f"\nFederal Exclusions:")
+        
+        oig_db = federal_exclusions.get('oig_database', {})
+        print(f"  OIG Database:")
+        print(f"    Loaded: {oig_db.get('loaded', False)}")
+        print(f"    Exclusions Count: {oig_db.get('exclusions_count', 0)}")
+        print(f"    Status: {oig_db.get('status', 'Unknown')}")
+        
+        sam_db = federal_exclusions.get('sam_database', {})
+        print(f"  SAM Database:")
+        print(f"    Loaded: {sam_db.get('loaded', False)}")
+        print(f"    Exclusions Count: {sam_db.get('exclusions_count', 0)}")
+        print(f"    Status: {sam_db.get('status', 'Unknown')}")
+        
+        # State Medicaid
+        state_medicaid = response.get('state_medicaid', {})
+        print(f"\nState Medicaid:")
+        print(f"  Databases Available: {state_medicaid.get('databases_available', 0)}")
+        print(f"  Databases Loaded: {state_medicaid.get('databases_loaded', 0)}")
+        print(f"  Total Exclusions: {state_medicaid.get('total_exclusions', 0)}")
+        print(f"  States Supported: {', '.join(state_medicaid.get('states_supported', []))}")
+        print(f"  Status: {state_medicaid.get('status', 'Unknown')}")
+        
+        # License Verification
+        license_verification = response.get('license_verification', {})
+        print(f"\nLicense Verification:")
+        
+        npi_registry = license_verification.get('npi_registry', {})
+        print(f"  NPI Registry:")
+        print(f"    Loaded: {npi_registry.get('loaded', False)}")
+        print(f"    Providers Count: {npi_registry.get('providers_count', 0)}")
+        print(f"    Status: {npi_registry.get('status', 'Unknown')}")
+        
+        state_medical_boards = license_verification.get('state_medical_boards', {})
+        print(f"  State Medical Boards:")
+        print(f"    States Supported: {', '.join(state_medical_boards.get('states_supported', []))}")
+        print(f"    License Types: {', '.join(state_medical_boards.get('license_types', []))}")
+        print(f"    Status: {state_medical_boards.get('status', 'Unknown')}")
+        
+        # Criminal Background
+        criminal_background = response.get('criminal_background', {})
+        print(f"\nCriminal Background:")
+        
+        nsopw = criminal_background.get('nsopw_national', {})
+        print(f"  NSOPW National:")
+        print(f"    Loaded: {nsopw.get('loaded', False)}")
+        print(f"    Records Count: {nsopw.get('records_count', 0)}")
+        print(f"    Status: {nsopw.get('status', 'Unknown')}")
+        
+        fbi_wanted = criminal_background.get('fbi_wanted', {})
+        print(f"  FBI Most Wanted:")
+        print(f"    Loaded: {fbi_wanted.get('loaded', False)}")
+        print(f"    Records Count: {fbi_wanted.get('records_count', 0)}")
+        print(f"    Status: {fbi_wanted.get('status', 'Unknown')}")
+        
+        # HIPAA Compliance
+        hipaa_compliance = response.get('hipaa_compliance', {})
+        print(f"\nHIPAA Compliance:")
+        print(f"  Enabled: {hipaa_compliance.get('enabled', False)}")
+        print(f"  Data Encryption: {hipaa_compliance.get('data_encryption', 'Unknown')}")
+        print(f"  Multi-Factor Auth: {hipaa_compliance.get('multi_factor_auth', 'Unknown')}")
+        print(f"  Audit Logging: {hipaa_compliance.get('audit_logging', 'Unknown')}")
+        print(f"  Status: {hipaa_compliance.get('status', 'Unknown')}")
+        
+        # Verification Capabilities
+        verification_capabilities = response.get('verification_capabilities', {})
+        print(f"\nVerification Capabilities:")
+        print(f"  Total Verification Types: {verification_capabilities.get('total_verification_types', 0)}")
+        print(f"  Federal Exclusions: {verification_capabilities.get('federal_exclusions', 0)}")
+        print(f"  State Medicaid: {verification_capabilities.get('state_medicaid', 0)}")
+        print(f"  License Verification: {verification_capabilities.get('license_verification', 0)}")
+        print(f"  Criminal Background: {verification_capabilities.get('criminal_background', 0)}")
+        print(f"  Comprehensive Check: {verification_capabilities.get('comprehensive_check', 'Unknown')}")
+    
+    return success, response
+
 def main():
     # Get the backend URL from the frontend .env file
     backend_url = "https://5604b1c7-af2d-4c2d-865a-51fe8d939149.preview.emergentagent.com"
@@ -384,9 +482,9 @@ def main():
         print("❌ API root test failed, stopping tests")
         return 1
     
-    # Test SAM API endpoint first to check current system status
+    # Test verification system status first to check current system status
     print("\n=== Testing Current System Status ===")
-    test_sam_api_endpoint(tester)
+    test_verification_system_status(tester)
     
     # Test user registration or login
     print("\n=== Testing User Authentication ===")
