@@ -449,6 +449,138 @@ async def scheduled_data_updates():
     
     logger.info(f"🔄 Scheduled update completed. OIG: {oig_success}, SAM: {sam_success}")
 
+@api_router.post("/auth/setup-mfa")
+async def setup_mfa(current_user: User = Depends(get_current_user)):
+    """Set up MFA for current user (HIPAA requirement)"""
+    if not HIPAA_ENABLED or not mfa_manager:
+        raise HTTPException(status_code=501, detail="HIPAA features not available")
+    
+    try:
+        mfa_setup = await mfa_manager.setup_mfa_for_user(current_user.id, current_user.email)
+        
+        # Log MFA setup event
+        if audit_logger:
+            await audit_logger.log_authentication_event(
+                AuditEventType.MFA_SETUP,
+                current_user.id,
+                AuditOutcome.SUCCESS
+            )
+        
+        return {
+            "message": "MFA setup initiated",
+            "qr_code": mfa_setup["qr_code"],
+            "manual_entry_key": mfa_setup["manual_entry_key"],
+            "backup_codes": mfa_setup["backup_codes"]
+        }
+    except Exception as e:
+        logger.error(f"MFA setup failed for user {current_user.id}: {e}")
+        raise HTTPException(status_code=500, detail="MFA setup failed")
+
+@api_router.post("/auth/verify-mfa")
+async def verify_mfa(
+    token: str = Form(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Verify MFA token and enable MFA"""
+    if not HIPAA_ENABLED or not mfa_manager:
+        raise HTTPException(status_code=501, detail="HIPAA features not available")
+    
+    try:
+        success = await mfa_manager.verify_and_enable_mfa(current_user.id, token)
+        
+        # Log MFA verification event
+        if audit_logger:
+            await audit_logger.log_authentication_event(
+                AuditEventType.MFA_VERIFICATION,
+                current_user.id,
+                AuditOutcome.SUCCESS if success else AuditOutcome.FAILURE,
+                details={"mfa_enabled": success}
+            )
+        
+        if success:
+            return {"message": "MFA enabled successfully"}
+        else:
+            raise HTTPException(status_code=400, detail="Invalid MFA token")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"MFA verification failed for user {current_user.id}: {e}")
+        raise HTTPException(status_code=500, detail="MFA verification failed")
+
+@api_router.get("/admin/audit-logs")
+async def get_audit_logs(
+    user_id: Optional[str] = None,
+    event_type: Optional[str] = None,
+    limit: int = 100,
+    current_user: User = Depends(get_current_user)
+):
+    """Get audit logs (admin only, HIPAA requirement)"""
+    if not HIPAA_ENABLED or not audit_logger:
+        raise HTTPException(status_code=501, detail="HIPAA features not available")
+    
+    # Check admin permissions
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        # Convert string to enum if provided
+        event_type_enum = None
+        if event_type:
+            try:
+                event_type_enum = AuditEventType(event_type)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid event type")
+        
+        logs = await audit_logger.get_audit_trail(
+            user_id=user_id,
+            event_type=event_type_enum,
+            limit=limit
+        )
+        
+        # Log audit access
+        await audit_logger.log_admin_action(
+            current_user.id,
+            "audit_logs_accessed",
+            details={"filters": {"user_id": user_id, "event_type": event_type, "limit": limit}}
+        )
+        
+        return {"audit_logs": logs, "total_returned": len(logs)}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Audit log retrieval failed: {e}")
+        raise HTTPException(status_code=500, detail="Audit log retrieval failed")
+
+@api_router.get("/admin/security-alerts")
+async def get_security_alerts(
+    limit: int = 50,
+    current_user: User = Depends(get_current_user)
+):
+    """Get security alerts (admin only)"""
+    if not HIPAA_ENABLED or not audit_logger:
+        raise HTTPException(status_code=501, detail="HIPAA features not available")
+    
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        alerts = await audit_logger.get_security_alerts(limit=limit)
+        
+        # Log security alert access
+        await audit_logger.log_admin_action(
+            current_user.id,
+            "security_alerts_accessed",
+            details={"limit": limit}
+        )
+        
+        return {"security_alerts": alerts, "total_returned": len(alerts)}
+        
+    except Exception as e:
+        logger.error(f"Security alerts retrieval failed: {e}")
+        raise HTTPException(status_code=500, detail="Security alerts retrieval failed")
+
 @api_router.get("/admin/update-history")
 async def get_update_history():
     """Get history of data updates"""
