@@ -216,7 +216,7 @@ const EmployeeForm = ({ onEmployeeAdded }) => {
 
 const EmployeeList = ({ employees, onVerifyEmployee }) => {
   const [selectedEmployees, setSelectedEmployees] = useState(new Set());
-  const [verificationTypes, setVerificationTypes] = useState(['oig']);
+  const [verificationTypes, setVerificationTypes] = useState(['oig', 'sam']);
 
   const handleSelectEmployee = (employeeId) => {
     const newSelected = new Set(selectedEmployees);
