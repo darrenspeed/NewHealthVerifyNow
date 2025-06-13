@@ -1705,7 +1705,7 @@ async def check_sam_exclusion(employee: Employee) -> VerificationResult:
                 # Store result in database
                 await db.verification_results.insert_one(result.dict())
                 
-                logger.info(f"SAM v4 check completed for {employee.first_name} {employee.last_name}: {result.status} ({len(verified_matches)} verified matches)")
+                logger.info(f"SAM v4 check completed for {employee.first_name} {employee.last_name}: {result.status}")
                 
                 return result
                 
