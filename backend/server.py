@@ -2973,12 +2973,8 @@ async def startup_event():
     else:
         logger.warning("⚠️ Failed to load OIG exclusion database - will attempt download on first check")
     
-    # Download and load SAM data on startup
-    logger.info("Initializing SAM exclusion database...")
-    if await load_sam_data_to_memory():
-        logger.info("✅ SAM exclusion database loaded successfully")
-    else:
-        logger.warning("⚠️ Failed to load SAM exclusion database - will attempt download on first check")
+    # SAM API v4 integration - no local data needed
+    logger.info("SAM exclusion checks will use SAM.gov API v4 directly")
     
     # Initialize License Verification databases
     logger.info("Initializing License Verification databases...")
