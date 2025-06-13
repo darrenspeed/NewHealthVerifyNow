@@ -442,7 +442,7 @@ class SAMAPITester:
     
     def print_summary(self):
         """Print a summary of test results"""
-        print("\n=== SAM API Integration Test Summary ===")
+        print("\n=== SAM API v4 Integration Test Summary ===")
         
         total_tests = len(self.test_results)
         passed_tests = sum(1 for result in self.test_results.values() if result)
@@ -455,19 +455,19 @@ class SAMAPITester:
         
         print("\nConclusion:")
         if self.test_results["sam_api_key_valid"] and self.test_results["sam_api_direct_access"]:
-            print("✅ SAM API key is valid and direct API access is working")
+            print("✅ SAM API key is valid and direct API v4 access is working")
         else:
-            print("❌ Issues with SAM API key or direct API access")
+            print("❌ Issues with SAM API key or direct API v4 access")
         
         if self.test_results["sam_integration_working"] and self.test_results["employee_verification_with_sam"]:
-            print("✅ SAM integration in the backend is working properly")
+            print("✅ SAM v4 API integration in the backend is working properly")
         else:
-            print("❌ Issues with SAM integration in the backend")
+            print("❌ Issues with SAM v4 API integration in the backend")
         
         if passed_tests >= total_tests * 0.8:  # 80% pass threshold
-            print("\nOverall: SAM API integration is working correctly")
+            print("\nOverall: SAM API v4 integration is working correctly")
         else:
-            print("\nOverall: SAM API integration has issues that need to be addressed")
+            print("\nOverall: SAM API v4 integration has issues that need to be addressed")
 
 def main():
     tester = SAMAPITester()
