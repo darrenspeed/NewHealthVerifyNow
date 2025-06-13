@@ -653,10 +653,16 @@ const MainApp = () => {
 
   const handleVerifyEmployee = async (employeeId) => {
     try {
-      // Include both federal and state verification types for comprehensive check
-      const verificationTypes = ['oig', 'sam', 'medicaid_ca', 'medicaid_tx', 'medicaid_fl', 'medicaid_ny'];
+      // Include comprehensive verification types for complete credentialing check
+      const verificationTypes = [
+        'oig', 'sam',                    // Federal exclusions
+        'npi',                           // License verification
+        'license_md_ca', 'license_rn_ca', // California licenses  
+        'nsopw_national', 'fbi_wanted',  // Criminal background
+        'medicaid_ca', 'medicaid_tx'     // State Medicaid
+      ];
       await axios.post(`${API}/employees/${employeeId}/verify`, verificationTypes);
-      alert('Comprehensive verification started (Federal + State Medicaid)!');
+      alert('Comprehensive credentialing verification started (Federal + State + License + Criminal)!');
       // Refresh results after a short delay
       setTimeout(() => {
         fetchVerificationResults();
