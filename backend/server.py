@@ -69,9 +69,17 @@ try:
     from audit_logger import HIPAAAuditLogger, AuditEventType, AuditOutcome
     HIPAA_ENABLED = True
     logger.info("HIPAA compliance modules loaded successfully")
+    
+    # Initialize HIPAA managers
+    mfa_manager = MFAManager(db)
+    audit_logger = HIPAAAuditLogger(db)
+    logger.info("HIPAA managers initialized")
+    
 except ImportError as e:
     logger.warning(f"HIPAA modules not available: {e}")
     HIPAA_ENABLED = False
+    mfa_manager = None
+    audit_logger = None
 
 # Authentication dependency
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
