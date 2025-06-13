@@ -133,6 +133,23 @@ class VerificationType(str, Enum):
     MEDICAID_NY = "medicaid_ny"  # New York Medicaid
     MEDICAID_IL = "medicaid_il"  # Illinois Medicaid
     MEDICAID_PA = "medicaid_pa"  # Pennsylvania Medicaid
+    # License Verification Types
+    NPI = "npi"  # National Provider Identifier
+    LICENSE_MD_CA = "license_md_ca"  # California Medical License
+    LICENSE_MD_TX = "license_md_tx"  # Texas Medical License  
+    LICENSE_MD_FL = "license_md_fl"  # Florida Medical License
+    LICENSE_MD_NY = "license_md_ny"  # New York Medical License
+    LICENSE_RN_CA = "license_rn_ca"  # California Nursing License
+    LICENSE_RN_TX = "license_rn_tx"  # Texas Nursing License
+    LICENSE_RN_FL = "license_rn_fl"  # Florida Nursing License
+    LICENSE_RN_NY = "license_rn_ny"  # New York Nursing License
+    # Criminal Background Types
+    NSOPW_NATIONAL = "nsopw_national"  # National Sex Offender Registry
+    NSOPW_CA = "nsopw_ca"  # California Sex Offender Registry
+    NSOPW_TX = "nsopw_tx"  # Texas Sex Offender Registry
+    NSOPW_FL = "nsopw_fl"  # Florida Sex Offender Registry
+    NSOPW_NY = "nsopw_ny"  # New York Sex Offender Registry
+    FBI_WANTED = "fbi_wanted"  # FBI Most Wanted
 
 # Models
 class Employee(BaseModel):
