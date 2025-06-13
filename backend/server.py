@@ -62,6 +62,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Import HIPAA compliance modules
+try:
+    from phi_encryption import phi_encryption
+    from mfa_manager import MFAManager  
+    from audit_logger import HIPAAAuditLogger, AuditEventType, AuditOutcome
+    HIPAA_ENABLED = True
+    logger.info("HIPAA compliance modules loaded successfully")
+except ImportError as e:
+    logger.warning(f"HIPAA modules not available: {e}")
+    HIPAA_ENABLED = False
+
 # Authentication dependency
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
     """Get current authenticated user"""
