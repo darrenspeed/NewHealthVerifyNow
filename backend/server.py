@@ -2902,12 +2902,33 @@ async def startup_event():
     else:
         logger.warning("⚠️ Failed to load SAM exclusion database - will attempt download on first check")
     
+    # Initialize License Verification databases
+    logger.info("Initializing License Verification databases...")
+    license_success = await download_npi_data()
+    if license_success:
+        logger.info("✅ License verification databases loaded successfully")
+    else:
+        logger.warning("⚠️ Failed to load license verification databases - will attempt download on first check")
+    
+    # Initialize Criminal Background databases
+    logger.info("Initializing Criminal Background databases...")
+    nsopw_success = await download_nsopw_data()
+    fbi_success = await download_fbi_wanted_data()
+    
+    if nsopw_success and fbi_success:
+        logger.info("✅ Criminal background databases loaded successfully")
+    else:
+        logger.warning("⚠️ Some criminal background databases failed to load - will attempt download on first check")
+    
     # Start background data updates
     start_background_updates()
     
     logger.info("🚀 Health Verify Now API ready for commercial use!")
     logger.info("   - OIG verification: Real-time searches against downloaded database")
     logger.info("   - SAM verification: Real-time searches against downloaded database")
+    logger.info("   - State Medicaid verification: Real-time searches per state")
+    logger.info("   - License verification: NPI Registry + State Medical/Nursing Boards")
+    logger.info("   - Criminal background: NSOPW + FBI Most Wanted + State registries")
     logger.info("   - Scheduled updates: Every 24 hours for data freshness")
 
 @app.on_event("shutdown")
