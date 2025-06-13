@@ -252,152 +252,104 @@ const EmployeeList = ({ employees, onVerifyEmployee }) => {
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-2xl font-bold text-gray-800">Employees ({employees.length})</h2>
         
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <label className="text-sm font-medium text-gray-700">Verification Types:</label>
-            <div className="flex flex-wrap gap-2">
-              {/* Federal Exclusions */}
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={verificationTypes.includes('oig')}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setVerificationTypes([...verificationTypes, 'oig']);
-                    } else {
-                      setVerificationTypes(verificationTypes.filter(t => t !== 'oig'));
-                    }
-                  }}
-                  className="mr-1"
-                />
-                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">OIG</span>
-              </label>
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={verificationTypes.includes('sam')}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setVerificationTypes([...verificationTypes, 'sam']);
-                    } else {
-                      setVerificationTypes(verificationTypes.filter(t => t !== 'sam'));
-                    }
-                  }}
-                  className="mr-1"
-                />
-                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">SAM</span>
-              </label>
-              
-              {/* License Verification */}
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={verificationTypes.includes('npi')}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setVerificationTypes([...verificationTypes, 'npi']);
-                    } else {
-                      setVerificationTypes(verificationTypes.filter(t => t !== 'npi'));
-                    }
-                  }}
-                  className="mr-1"
-                />
-                <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">NPI Registry</span>
-              </label>
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={verificationTypes.includes('license_md_ca')}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setVerificationTypes([...verificationTypes, 'license_md_ca']);
-                    } else {
-                      setVerificationTypes(verificationTypes.filter(t => t !== 'license_md_ca'));
-                    }
-                  }}
-                  className="mr-1"
-                />
-                <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">CA Medical</span>
-              </label>
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={verificationTypes.includes('license_rn_ca')}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setVerificationTypes([...verificationTypes, 'license_rn_ca']);
-                    } else {
-                      setVerificationTypes(verificationTypes.filter(t => t !== 'license_rn_ca'));
-                    }
-                  }}
-                  className="mr-1"
-                />
-                <span className="text-xs bg-pink-100 text-pink-800 px-2 py-1 rounded">CA Nursing</span>
-              </label>
-              
-              {/* Criminal Background */}
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={verificationTypes.includes('nsopw_national')}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setVerificationTypes([...verificationTypes, 'nsopw_national']);
-                    } else {
-                      setVerificationTypes(verificationTypes.filter(t => t !== 'nsopw_national'));
-                    }
-                  }}
-                  className="mr-1"
-                />
-                <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">Sex Offender</span>
-              </label>
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={verificationTypes.includes('fbi_wanted')}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setVerificationTypes([...verificationTypes, 'fbi_wanted']);
-                    } else {
-                      setVerificationTypes(verificationTypes.filter(t => t !== 'fbi_wanted'));
-                    }
-                  }}
-                  className="mr-1"
-                />
-                <span className="text-xs bg-gray-100 text-gray-800 px-2 py-1 rounded">FBI Wanted</span>
-              </label>
-              
-              {/* State Medicaid */}
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={verificationTypes.includes('medicaid_ca')}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setVerificationTypes([...verificationTypes, 'medicaid_ca']);
-                    } else {
-                      setVerificationTypes(verificationTypes.filter(t => t !== 'medicaid_ca'));
-                    }
-                  }}
-                  className="mr-1"
-                />
-                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">CA Medicaid</span>
-              </label>
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={verificationTypes.includes('medicaid_tx')}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setVerificationTypes([...verificationTypes, 'medicaid_tx']);
-                    } else {
-                      setVerificationTypes(verificationTypes.filter(t => t !== 'medicaid_tx'));
-                    }
-                  }}
-                  className="mr-1"
-                />
-                <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">TX Medicaid</span>
-              </label>
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">Verification Types:</label>
+            
+            {/* Federal Exclusions */}
+            <div className="mb-3">
+              <h4 className="text-xs font-semibold text-gray-600 mb-2">FEDERAL EXCLUSIONS</h4>
+              <div className="flex flex-wrap gap-2">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={verificationTypes.includes('oig')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setVerificationTypes([...verificationTypes, 'oig']);
+                      } else {
+                        setVerificationTypes(verificationTypes.filter(t => t !== 'oig'));
+                      }
+                    }}
+                    className="mr-2"
+                  />
+                  <span className="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-full">OIG Exclusions</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={verificationTypes.includes('sam')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setVerificationTypes([...verificationTypes, 'sam']);
+                      } else {
+                        setVerificationTypes(verificationTypes.filter(t => t !== 'sam'));
+                      }
+                    }}
+                    className="mr-2"
+                  />
+                  <span className="text-sm bg-green-100 text-green-800 px-3 py-1 rounded-full">SAM Exclusions</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Criminal Background */}
+            <div className="mb-3">
+              <h4 className="text-xs font-semibold text-gray-600 mb-2">CRIMINAL BACKGROUND</h4>
+              <div className="flex flex-wrap gap-2">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={verificationTypes.includes('nsopw')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setVerificationTypes([...verificationTypes, 'nsopw']);
+                      } else {
+                        setVerificationTypes(verificationTypes.filter(t => t !== 'nsopw'));
+                      }
+                    }}
+                    className="mr-2"
+                  />
+                  <span className="text-sm bg-red-100 text-red-800 px-3 py-1 rounded-full">Sex Offender Registry</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={verificationTypes.includes('criminal')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setVerificationTypes([...verificationTypes, 'criminal']);
+                      } else {
+                        setVerificationTypes(verificationTypes.filter(t => t !== 'criminal'));
+                      }
+                    }}
+                    className="mr-2"
+                  />
+                  <span className="text-sm bg-gray-100 text-gray-800 px-3 py-1 rounded-full">FBI Most Wanted</span>
+                </label>
+              </div>
+            </div>
+
+            {/* License Verification */}
+            <div className="mb-3">
+              <h4 className="text-xs font-semibold text-gray-600 mb-2">LICENSE VERIFICATION</h4>
+              <div className="flex flex-wrap gap-2">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={verificationTypes.includes('license')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setVerificationTypes([...verificationTypes, 'license']);
+                      } else {
+                        setVerificationTypes(verificationTypes.filter(t => t !== 'license'));
+                      }
+                    }}
+                    className="mr-2"
+                  />
+                  <span className="text-sm bg-purple-100 text-purple-800 px-3 py-1 rounded-full">Professional License</span>
+                </label>
+              </div>
             </div>
           </div>
           
