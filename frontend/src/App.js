@@ -470,7 +470,8 @@ const VerificationResults = ({ results, employees }) => {
             {results.map((result) => (
               <tr key={result.id} className="hover:bg-gray-50">
                 <td className="px-4 py-2 text-sm text-gray-900">
-                  {result.employee_id}
+                  <div className="font-medium">{getEmployeeName(result.employee_id)}</div>
+                  <div className="text-xs text-gray-500">ID: {result.employee_id.slice(-8)}</div>
                 </td>
                 <td className="px-4 py-2">
                   <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
