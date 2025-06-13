@@ -2774,6 +2774,12 @@ async def process_batch_verification_authenticated(
                         # Extract state code from verification type (e.g., medicaid_ca -> CA)
                         state_code = verification_type.split('_')[1].upper()
                         await check_state_medicaid_exclusion(employee, state_code)
+                    elif verification_type in ['npi', 'license_md_ca', 'license_md_tx', 'license_md_fl', 'license_md_ny', 'license_rn_ca', 'license_rn_tx', 'license_rn_fl', 'license_rn_ny']:
+                        # License verification
+                        await check_license_verification(employee, verification_type)
+                    elif verification_type in ['nsopw_national', 'nsopw_ca', 'nsopw_tx', 'nsopw_fl', 'nsopw_ny', 'fbi_wanted']:
+                        # Criminal background check
+                        await check_criminal_background(employee, verification_type)
                     
                     # Add small delay to prevent overwhelming external APIs
                     await asyncio.sleep(0.1)
