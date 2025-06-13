@@ -537,96 +537,91 @@ def main():
         print("❌ Failed to create test employee, stopping tests")
         return 1
     
-    # Test individual verification with SAM
-    print("\n=== Testing Individual Employee Verification with SAM ===")
-    success, results = tester.test_verify_employee(employee_id, ["sam"])
+    # Test individual employee verification with comprehensive check
+    print("\n=== Testing Individual Employee Verification with Comprehensive Check ===")
+    comprehensive_verification_types = [
+        "oig", "sam",                    # Federal exclusions
+        "medicaid_ca", "medicaid_tx",    # State Medicaid
+        "npi", "license_md_ca",          # License verification
+        "nsopw_national", "fbi_wanted"   # Criminal background
+    ]
+    
+    success, results = tester.test_verify_employee(employee_id, comprehensive_verification_types)
     
     if success:
-        print(f"SAM verification initiated for employee ID: {employee_id}")
+        print(f"Comprehensive verification initiated for employee ID: {employee_id}")
         
         # Wait for verification to complete
-        print("Waiting for SAM verification to complete...")
-        time.sleep(3)
+        print("Waiting for comprehensive verification to complete...")
+        time.sleep(5)
         
         # Check verification results
         success, results = tester.test_get_employee_verification_results(employee_id)
         if success:
-            sam_results = [r for r in results if r.get('verification_type') == 'sam']
+            # Group results by verification type category
+            federal_results = [r for r in results if r.get('verification_type') in ['oig', 'sam']]
+            state_results = [r for r in results if r.get('verification_type').startswith('medicaid_')]
+            license_results = [r for r in results if r.get('verification_type') in ['npi', 'license_md_ca']]
+            criminal_results = [r for r in results if r.get('verification_type') in ['nsopw_national', 'fbi_wanted']]
             
-            if sam_results:
-                for result in sam_results:
-                    status = result.get('status')
-                    print(f"\nSAM Verification Status: {status.upper()}")
-                    
-                    # Check for error message
-                    error_message = result.get('error_message')
-                    if error_message:
-                        print(f"Error Message: {error_message}")
-                    
-                    # Check for detailed results
-                    results_data = result.get('results', {})
-                    
-                    # Check if SAM attempted to download data
-                    database_info = results_data.get('database_info', {})
-                    if database_info:
-                        print(f"\nDatabase Info:")
-                        print(f"  Total Exclusions: {database_info.get('total_exclusions_in_database', 0)}")
-                        print(f"  Last Updated: {database_info.get('last_updated', 'Unknown')}")
-                        print(f"  Source: {database_info.get('source', 'Unknown')}")
-                        print(f"  Verification Method: {database_info.get('verification_method', 'Unknown')}")
-                    
-                    # Check for match details
-                    match_details = results_data.get('match_details', [])
-                    if match_details:
-                        print(f"\nMatch Details Found: {len(match_details)}")
-                        for i, match in enumerate(match_details, 1):
-                            print(f"  Match #{i}:")
-                            for key, value in match.items():
-                                print(f"    {key}: {value}")
-            else:
-                print(f"No SAM verification results found for employee ID: {employee_id}")
-    
-    # Test individual verification with OIG
-    print("\n=== Testing Individual Employee Verification with OIG ===")
-    success, results = tester.test_verify_employee(employee_id, ["oig"])
-    
-    if success:
-        print(f"OIG verification initiated for employee ID: {employee_id}")
-        
-        # Wait for verification to complete
-        print("Waiting for OIG verification to complete...")
-        time.sleep(3)
-        
-        # Check verification results
-        success, results = tester.test_get_employee_verification_results(employee_id)
-        if success:
-            oig_results = [r for r in results if r.get('verification_type') == 'oig']
+            # Print summary by category
+            print("\nVerification Results Summary:")
+            print(f"  Federal Exclusions: {len(federal_results)} results")
+            print(f"  State Medicaid: {len(state_results)} results")
+            print(f"  License Verification: {len(license_results)} results")
+            print(f"  Criminal Background: {len(criminal_results)} results")
             
-            if oig_results:
-                for result in oig_results:
-                    status = result.get('status')
-                    print(f"\nOIG Verification Status: {status.upper()}")
-                    
-                    # Check for error message
-                    error_message = result.get('error_message')
-                    if error_message:
-                        print(f"Error Message: {error_message}")
-                    
-                    # Check for detailed results
-                    results_data = result.get('results', {})
-                    
-                    # Check database info
-                    database_info = results_data.get('database_info', {})
-                    if database_info:
-                        print(f"\nDatabase Info:")
-                        print(f"  Total Exclusions: {database_info.get('total_exclusions_in_database', 0)}")
-                        print(f"  Last Updated: {database_info.get('last_updated', 'Unknown')}")
-                        print(f"  Source: {database_info.get('source', 'Unknown')}")
-            else:
-                print(f"No OIG verification results found for employee ID: {employee_id}")
+            # Print detailed results for each category
+            for category_name, category_results in [
+                ("Federal Exclusions", federal_results),
+                ("State Medicaid", state_results),
+                ("License Verification", license_results),
+                ("Criminal Background", criminal_results)
+            ]:
+                if category_results:
+                    print(f"\n{category_name} Results:")
+                    for result in category_results:
+                        verification_type = result.get('verification_type')
+                        status = result.get('status')
+                        print(f"  - {verification_type.upper()}: {status.upper()}")
+                        
+                        # Check for error message
+                        error_message = result.get('error_message')
+                        if error_message:
+                            print(f"    Error: {error_message}")
+                        
+                        # Check for detailed results
+                        results_data = result.get('results', {})
+                        
+                        # Print key result indicators based on verification type
+                        if verification_type in ['oig', 'sam', 'medicaid_ca', 'medicaid_tx']:
+                            excluded = results_data.get('excluded', False)
+                            print(f"    Excluded: {excluded}")
+                            
+                            match_count = results_data.get('high_confidence_matches', 0)
+                            print(f"    High Confidence Matches: {match_count}")
+                            
+                        elif verification_type in ['npi', 'license_md_ca']:
+                            verified = results_data.get('license_verified', False)
+                            print(f"    License Verified: {verified}")
+                            
+                        elif verification_type in ['nsopw_national', 'fbi_wanted']:
+                            record_found = results_data.get('criminal_record_found', False)
+                            print(f"    Criminal Record Found: {record_found}")
+            
+            # Check if all verification types were processed
+            verification_types_found = set(r.get('verification_type') for r in results)
+            missing_types = set(comprehensive_verification_types) - verification_types_found
+            
+            if missing_types:
+                print(f"\nWarning: The following verification types were not found in results:")
+                for missing_type in missing_types:
+                    print(f"  - {missing_type}")
+        else:
+            print(f"Failed to retrieve verification results for employee ID: {employee_id}")
     
-    # Test batch verification with both OIG and SAM
-    print("\n=== Testing Batch Verification with OIG and SAM ===")
+    # Test batch verification with comprehensive check
+    print("\n=== Testing Batch Verification with Comprehensive Check ===")
     
     # Create a few more test employees for batch testing
     batch_employee_ids = [employee_id]
@@ -635,12 +630,13 @@ def main():
         if batch_id:
             batch_employee_ids.append(batch_id)
     
-    # Run batch verification
-    tester.test_batch_verification(batch_employee_ids, ["oig", "sam"])
+    # Run batch verification with comprehensive check
+    tester.test_batch_verification(batch_employee_ids, comprehensive_verification_types)
     
     # Wait for batch verification to complete
     print("\nWaiting for batch verification to complete...")
     time.sleep(5)
+    
     
     # Get all verification results
     print("\n=== Summary of All Verification Results ===")
