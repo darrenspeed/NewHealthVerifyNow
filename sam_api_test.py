@@ -82,54 +82,57 @@ class SAMAPITester:
             return False
     
     def test_sam_api_direct_access(self):
-        """Test direct access to SAM API with a sample query"""
-        print("\n=== Testing Direct SAM API Access ===")
+        """Test direct access to SAM API v4 with a sample query"""
+        print("\n=== Testing Direct SAM API v4 Access ===")
         
         try:
-            # Test the SAM API with a sample query
+            # Test the SAM API v4 with a sample query
             headers = {
-                "X-Api-Key": SAM_API_KEY,
                 "Accept": "application/json"
             }
             
-            # Use the SAM.gov API v1 exclusions endpoint with a sample name
-            url = "https://api.sam.gov/prod/api/v1/exclusions"
+            # Use the SAM.gov API v4 exclusions endpoint with a sample name
+            url = "https://api.sam.gov/exclusions/v4"
             params = {
                 "api_key": SAM_API_KEY,
-                "firstName": "JOHN",
-                "lastName": "SMITH",
-                "classification": "Individual",
-                "isActive": "Y",
-                "format": "json"
+                "exclusionName": "John Smith",
+                "recordStatus": "Active"
             }
+            
+            print(f"Calling SAM.gov API v4 endpoint: {url}")
+            print(f"Parameters: exclusionName={params['exclusionName']}, recordStatus={params['recordStatus']}")
             
             response = requests.get(url, params=params, headers=headers)
             
             if response.status_code == 200:
                 data = response.json()
                 total_records = data.get('totalRecords', 0)
+                exclusion_details = data.get('exclusionDetails', [])
                 
-                print(f"✅ Successfully queried SAM API")
-                print(f"  Query: firstName=JOHN, lastName=SMITH")
+                print(f"✅ Successfully queried SAM API v4")
+                print(f"  Query: exclusionName={params['exclusionName']}")
                 print(f"  Total records found: {total_records}")
+                print(f"  Exclusion details count: {len(exclusion_details)}")
                 
                 # Check the response format to ensure it matches what the code expects
-                if 'totalRecords' in data and 'exclusionList' in data:
-                    print("✅ SAM API response format matches expected structure")
+                if 'totalRecords' in data and 'exclusionDetails' in data:
+                    print("✅ SAM API v4 response format matches expected structure")
+                    print("\nSample response structure:")
+                    print(json.dumps(data, indent=2)[:1000] + "...\n" if len(json.dumps(data)) > 1000 else json.dumps(data, indent=2))
                     self.test_results["sam_api_direct_access"] = True
                     return True, data
                 else:
-                    print("❌ SAM API response format does not match expected structure")
-                    print(f"Expected keys: 'totalRecords', 'exclusionList'")
+                    print("❌ SAM API v4 response format does not match expected structure")
+                    print(f"Expected keys: 'totalRecords', 'exclusionDetails'")
                     print(f"Actual keys: {', '.join(data.keys())}")
                     return False, data
             else:
-                print(f"❌ SAM API query failed: HTTP {response.status_code}")
+                print(f"❌ SAM API v4 query failed: HTTP {response.status_code}")
                 print(f"Response: {response.text[:500]}")
                 return False, {}
                 
         except Exception as e:
-            print(f"❌ Error querying SAM API: {str(e)}")
+            print(f"❌ Error querying SAM API v4: {str(e)}")
             return False, {}
     
     def login(self):
