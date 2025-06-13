@@ -710,7 +710,7 @@ const MainApp = () => {
                     employees={employees} 
                     onVerifyEmployee={handleVerifyEmployee}
                   />
-                  <VerificationResults results={verificationResults} />
+                  <VerificationResults results={verificationResults} employees={employees} />
                 </>
               ) : (
                 <div className="bg-white rounded-lg shadow-md p-8 text-center">
