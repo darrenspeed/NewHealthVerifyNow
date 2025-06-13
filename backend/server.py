@@ -187,6 +187,58 @@ OIG_DOWNLOAD_URL = "https://oig.hhs.gov/exclusions/downloadables/UPDATED.csv"
 # SAM Exclusion Check Functions
 SAM_DATA_FILE = ROOT_DIR / "sam_exclusions.csv"
 
+# State Medicaid Exclusion Configuration
+STATE_MEDICAID_CONFIG = {
+    "CA": {
+        "name": "California Medi-Cal",
+        "data_file": ROOT_DIR / "medicaid_ca_exclusions.csv",
+        "download_url": "https://files.medi-cal.ca.gov/pubsdoco/suspended_and_ineligible_provider_list.csv",
+        "enabled": True,
+        "update_frequency_days": 7,
+        "data_format": "csv",
+        "name_fields": ["PROVIDER_NAME", "FIRST_NAME", "LAST_NAME"],
+        "date_fields": ["SUSPENSION_DATE", "EFFECTIVE_DATE"]
+    },
+    "TX": {
+        "name": "Texas Medicaid",
+        "data_file": ROOT_DIR / "medicaid_tx_exclusions.csv", 
+        "download_url": "https://www.tmhp.com/sites/default/files/file-downloads/resources/texas-medicaid-exclusion-list.csv",
+        "enabled": True,
+        "update_frequency_days": 7,
+        "data_format": "csv",
+        "name_fields": ["NAME", "FIRST_NAME", "LAST_NAME"],
+        "date_fields": ["EXCLUSION_DATE", "EFFECTIVE_DATE"]
+    },
+    "FL": {
+        "name": "Florida Medicaid",
+        "data_file": ROOT_DIR / "medicaid_fl_exclusions.csv",
+        "download_url": "https://ahca.myflorida.com/medicaid/exclusions/exclusion_list.csv",
+        "enabled": True,
+        "update_frequency_days": 7,
+        "data_format": "csv", 
+        "name_fields": ["PROVIDER_NAME", "FIRST_NAME", "LAST_NAME"],
+        "date_fields": ["EXCLUSION_DATE", "SUSPENSION_DATE"]
+    },
+    "NY": {
+        "name": "New York Medicaid",
+        "data_file": ROOT_DIR / "medicaid_ny_exclusions.csv",
+        "download_url": "https://omig.ny.gov/system/files/documents/2024/excluded-individuals-entities.csv",
+        "enabled": True,
+        "update_frequency_days": 7,
+        "data_format": "csv",
+        "name_fields": ["NAME", "INDIVIDUAL_NAME", "ENTITY_NAME"],
+        "date_fields": ["EXCLUSION_DATE", "EFFECTIVE_DATE"]
+    }
+}
+
+# In-memory state Medicaid data storage
+state_medicaid_cache = {
+    "CA": [],
+    "TX": [],
+    "FL": [],
+    "NY": []
+}
+
 async def download_oig_data():
     """Download the latest OIG exclusion list from HHS.gov"""
     try:
