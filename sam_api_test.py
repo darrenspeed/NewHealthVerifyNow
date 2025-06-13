@@ -43,42 +43,40 @@ class SAMAPITester:
             return False
     
     def test_sam_api_key_valid(self):
-        """Test if the SAM API key is valid"""
-        print("\n=== Testing SAM API Key Validity ===")
+        """Test if the SAM API key is valid with v4 API"""
+        print("\n=== Testing SAM API Key Validity with v4 API ===")
         
         try:
-            # Test the SAM API key directly with SAM.gov API
+            # Test the SAM API key directly with SAM.gov API v4
             headers = {
-                "X-Api-Key": SAM_API_KEY,
                 "Accept": "application/json"
             }
             
-            # Use the SAM.gov API v1 exclusions endpoint
-            url = "https://api.sam.gov/prod/api/v1/exclusions"
+            # Use the SAM.gov API v4 exclusions endpoint
+            url = "https://api.sam.gov/exclusions/v4"
             params = {
                 "api_key": SAM_API_KEY,
-                "classification": "Individual",
-                "isActive": "Y",
-                "format": "json"
+                "recordStatus": "Active",
+                "limit": 1  # Just get one record to verify key works
             }
             
             response = requests.get(url, params=params, headers=headers)
             
             if response.status_code == 200:
-                print("✅ SAM API key is valid")
+                print("✅ SAM API key is valid for v4 API")
                 self.test_results["sam_api_key_valid"] = True
                 return True
             elif response.status_code == 401 or response.status_code == 403:
-                print(f"❌ SAM API key is invalid or expired: HTTP {response.status_code}")
+                print(f"❌ SAM API key is invalid or expired for v4 API: HTTP {response.status_code}")
                 print(f"Response: {response.text[:500]}")
                 return False
             else:
-                print(f"❌ SAM API returned unexpected status code: {response.status_code}")
+                print(f"❌ SAM API v4 returned unexpected status code: {response.status_code}")
                 print(f"Response: {response.text[:500]}")
                 return False
                 
         except Exception as e:
-            print(f"❌ Error testing SAM API key: {str(e)}")
+            print(f"❌ Error testing SAM API v4 key: {str(e)}")
             return False
     
     def test_sam_api_direct_access(self):
