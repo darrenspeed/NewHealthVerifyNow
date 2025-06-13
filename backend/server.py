@@ -2105,6 +2105,10 @@ async def process_batch_verification_authenticated(
                         await check_oig_exclusion(employee)
                     elif verification_type == VerificationType.SAM:
                         await check_sam_exclusion(employee)
+                    elif verification_type.startswith('medicaid_'):
+                        # Extract state code from verification type (e.g., medicaid_ca -> CA)
+                        state_code = verification_type.split('_')[1].upper()
+                        await check_state_medicaid_exclusion(employee, state_code)
                     
                     # Add small delay to prevent overwhelming external APIs
                     await asyncio.sleep(0.1)
