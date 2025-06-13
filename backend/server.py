@@ -492,6 +492,120 @@ def search_sam_exclusions(first_name, last_name, middle_name=None):
     if not sam_exclusions_cache:
         logger.warning("SAM data not loaded in memory")
         return matches
+
+async def download_state_medicaid_data(state_code):
+    """Download Medicaid exclusion data for a specific state"""
+    try:
+        if state_code not in STATE_MEDICAID_CONFIG:
+            logger.error(f"Unknown state code: {state_code}")
+            return False
+        
+        config = STATE_MEDICAID_CONFIG[state_code]
+        if not config.get("enabled", False):
+            logger.info(f"State {state_code} Medicaid downloads are disabled")
+            return False
+        
+        logger.info(f"Downloading {config['name']} exclusion data...")
+        
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.get(config["download_url"])
+            
+            if response.status_code == 200:
+                # Save the data to local file
+                async with aiofiles.open(config["data_file"], 'wb') as f:
+                    await f.write(response.content)
+                
+                logger.info(f"{config['name']} data downloaded successfully: {len(response.content)} bytes")
+                
+                # Load data into memory for faster searches
+                await load_state_medicaid_data_to_memory(state_code)
+                return True
+            else:
+                logger.error(f"Failed to download {config['name']} data: HTTP {response.status_code}")
+                return False
+                
+    except Exception as e:
+        logger.error(f"Error downloading {config['name']} data: {e}")
+        return False
+
+async def load_state_medicaid_data_to_memory(state_code):
+    """Load state Medicaid exclusion data into memory for fast searches"""
+    global state_medicaid_cache
+    
+    if state_code not in STATE_MEDICAID_CONFIG:
+        return False
+    
+    config = STATE_MEDICAID_CONFIG[state_code]
+    
+    if not config["data_file"].exists():
+        logger.warning(f"{config['name']} data file not found, attempting to download...")
+        if not await download_state_medicaid_data(state_code):
+            return False
+    
+    try:
+        logger.info(f"Loading {config['name']} exclusion data into memory...")
+        exclusions = []
+        
+        async with aiofiles.open(config["data_file"], mode='r', encoding='utf-8') as f:
+            content = await f.read()
+            
+        # Parse CSV content - each state may have different field names
+        csv_reader = csv.DictReader(io.StringIO(content))
+        
+        for row in csv_reader:
+            # Normalize data format for each state
+            exclusion = {
+                'state': state_code,
+                'provider_name': '',
+                'first_name': '',
+                'last_name': '',
+                'exclusion_date': '',
+                'exclusion_type': row.get('EXCLUSION_TYPE', '').strip(),
+                'reason': row.get('REASON', '').strip(),
+                'npi': row.get('NPI', '').strip(),
+                'license_number': row.get('LICENSE_NUMBER', '').strip(),
+                'address': row.get('ADDRESS', '').strip(),
+                'city': row.get('CITY', '').strip(),
+                'zip_code': row.get('ZIP', '').strip(),
+                'raw_data': row  # Keep original data for debugging
+            }
+            
+            # Extract name from various possible field combinations
+            name_fields = config.get("name_fields", ["NAME"])
+            for field in name_fields:
+                if field in row and row[field]:
+                    name_value = row[field].strip().upper()
+                    if "FIRST" in field or "FNAME" in field:
+                        exclusion['first_name'] = name_value
+                    elif "LAST" in field or "LNAME" in field:
+                        exclusion['last_name'] = name_value
+                    else:
+                        exclusion['provider_name'] = name_value
+            
+            # Extract dates
+            date_fields = config.get("date_fields", ["EXCLUSION_DATE"])
+            for field in date_fields:
+                if field in row and row[field]:
+                    exclusion['exclusion_date'] = row[field].strip()
+                    break
+            
+            exclusions.append(exclusion)
+        
+        state_medicaid_cache[state_code] = exclusions
+        logger.info(f"Loaded {len(exclusions)} {config['name']} exclusions into memory")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error loading {config['name']} data: {e}")
+        return False
+
+def search_state_medicaid_exclusions(state_code, first_name, last_name, middle_name=None):
+    """Search state Medicaid exclusions for matching individuals"""
+    matches = []
+    
+    if state_code not in state_medicaid_cache or not state_medicaid_cache[state_code]:
+        logger.warning(f"{state_code} Medicaid data not loaded in memory")
+        return matches
     
     # Normalize search terms
     search_first = normalize_name(first_name)
