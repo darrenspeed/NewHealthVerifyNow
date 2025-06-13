@@ -2002,6 +2002,11 @@ async def verify_employee(
             elif verification_type == VerificationType.SAM:
                 result = await check_sam_exclusion(employee)
                 results.append(result)
+            elif verification_type.startswith('medicaid_'):
+                # Extract state code from verification type (e.g., medicaid_ca -> CA)
+                state_code = verification_type.split('_')[1].upper()
+                result = await check_state_medicaid_exclusion(employee, state_code)
+                results.append(result)
             else:
                 # Placeholder for other verification types
                 result = VerificationResult(
