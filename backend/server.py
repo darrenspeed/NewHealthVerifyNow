@@ -612,7 +612,7 @@ def search_state_medicaid_exclusions(state_code, first_name, last_name, middle_n
     search_last = normalize_name(last_name)
     search_middle = normalize_name(middle_name) if middle_name else ""
     
-    for exclusion in sam_exclusions_cache:
+    for exclusion in state_medicaid_cache[state_code]:
         match_score = 0
         
         # Method 1: Check individual name fields if available
@@ -623,26 +623,24 @@ def search_state_medicaid_exclusions(state_code, first_name, last_name, middle_n
                 match_score = 100  # Exact first + last name match
                 
                 # Check middle name if provided
-                if search_middle and exclusion['middle_name']:
+                if search_middle and exclusion.get('middle_name'):
                     if exclusion['middle_name'] == search_middle:
                         match_score = 100  # Perfect match
-                    elif exclusion['middle_name'].startswith(search_middle) or search_middle.startswith(exclusion['middle_name']):
-                        match_score = 95   # Partial middle name match
                     else:
                         match_score = 85   # Different middle name
         
-        # Method 2: Check full name field (exclusion_name)
-        elif exclusion['exclusion_name']:
+        # Method 2: Check provider name field 
+        elif exclusion['provider_name']:
             full_search_name = f"{search_first} {search_last}"
             full_search_name_with_middle = f"{search_first} {search_middle} {search_last}" if search_middle else full_search_name
             
-            # Check if our search name is in the exclusion name
-            if full_search_name in exclusion['exclusion_name']:
+            # Check if our search name is in the provider name
+            if full_search_name in exclusion['provider_name']:
                 match_score = 90
-            elif search_middle and full_search_name_with_middle in exclusion['exclusion_name']:
+            elif search_middle and full_search_name_with_middle in exclusion['provider_name']:
                 match_score = 95
-            elif (search_first in exclusion['exclusion_name'] and 
-                  search_last in exclusion['exclusion_name']):
+            elif (search_first in exclusion['provider_name'] and 
+                  search_last in exclusion['provider_name']):
                 match_score = 80
         
         # Only include high-confidence matches
@@ -650,13 +648,119 @@ def search_state_medicaid_exclusions(state_code, first_name, last_name, middle_n
             matches.append({
                 'exclusion': exclusion,
                 'match_score': match_score,
-                'match_type': 'name_match'
+                'match_type': 'name_match',
+                'state': state_code
             })
     
     # Sort by match score (highest first)
     matches.sort(key=lambda x: x['match_score'], reverse=True)
     
     return matches
+
+async def check_state_medicaid_exclusion(employee: Employee, state_code: str) -> VerificationResult:
+    """Check if employee is in state Medicaid exclusion list"""
+    try:
+        if state_code not in STATE_MEDICAID_CONFIG:
+            result = VerificationResult(
+                employee_id=employee.id,
+                verification_type=f"medicaid_{state_code.lower()}",
+                status=VerificationStatus.ERROR,
+                error_message=f"Unsupported state: {state_code}",
+                data_source=f"{state_code} Medicaid"
+            )
+            await db.verification_results.insert_one(result.dict())
+            return result
+        
+        config = STATE_MEDICAID_CONFIG[state_code]
+        
+        # Ensure state data is loaded
+        if not state_medicaid_cache[state_code]:
+            logger.info(f"{config['name']} data not in memory, loading...")
+            await load_state_medicaid_data_to_memory(state_code)
+        
+        if not state_medicaid_cache[state_code]:
+            logger.error(f"Failed to load {config['name']} exclusion data")
+            result = VerificationResult(
+                employee_id=employee.id,
+                verification_type=f"medicaid_{state_code.lower()}",
+                status=VerificationStatus.ERROR,
+                error_message=f"{config['name']} exclusion database not available",
+                data_source=f"{config['name']}"
+            )
+            await db.verification_results.insert_one(result.dict())
+            return result
+        
+        # Search for matches using local data
+        matches = search_state_medicaid_exclusions(
+            state_code,
+            employee.first_name, 
+            employee.last_name, 
+            employee.middle_name
+        )
+        
+        # Prepare match details for high-confidence matches
+        high_confidence_matches = [m for m in matches if m['match_score'] >= 90]
+        
+        result = VerificationResult(
+            employee_id=employee.id,
+            verification_type=f"medicaid_{state_code.lower()}",
+            status=VerificationStatus.FAILED if len(high_confidence_matches) > 0 else VerificationStatus.PASSED,
+            results={
+                "excluded": len(high_confidence_matches) > 0,
+                "total_matches_found": len(matches),
+                "high_confidence_matches": len(high_confidence_matches),
+                "state": state_code,
+                "state_name": config['name'],
+                "match_details": [
+                    {
+                        "provider_name": match['exclusion']['provider_name'] or f"{match['exclusion']['first_name']} {match['exclusion']['last_name']}".strip(),
+                        "first_name": match['exclusion']['first_name'],
+                        "last_name": match['exclusion']['last_name'],
+                        "exclusion_date": match['exclusion']['exclusion_date'],
+                        "exclusion_type": match['exclusion']['exclusion_type'],
+                        "reason": match['exclusion']['reason'],
+                        "npi": match['exclusion']['npi'],
+                        "license_number": match['exclusion']['license_number'],
+                        "address": f"{match['exclusion']['address']}, {match['exclusion']['city']} {match['exclusion']['zip_code']}".strip().rstrip(','),
+                        "match_score": match['match_score'],
+                        "state": state_code
+                    }
+                    for match in high_confidence_matches[:5]  # Limit to top 5 matches
+                ],
+                "search_criteria": {
+                    "first_name": employee.first_name,
+                    "last_name": employee.last_name,
+                    "middle_name": employee.middle_name,
+                    "state": state_code
+                },
+                "database_info": {
+                    "total_exclusions_in_database": len(state_medicaid_cache[state_code]),
+                    "last_updated": datetime.utcnow().isoformat(),
+                    "source": f"{config['name']} Exclusion Database",
+                    "verification_method": "Local Search"
+                }
+            },
+            data_source=f"{config['name']}"
+        )
+        
+        # Store result in database
+        await db.verification_results.insert_one(result.dict())
+        
+        logger.info(f"{config['name']} check completed for {employee.first_name} {employee.last_name}: {result.status} ({len(high_confidence_matches)} high-confidence matches)")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error checking {config['name']} exclusion for employee {employee.id}: {e}")
+        error_result = VerificationResult(
+            employee_id=employee.id,
+            verification_type=f"medicaid_{state_code.lower()}",
+            status=VerificationStatus.ERROR,
+            error_message=str(e),
+            data_source=f"{state_code} Medicaid"
+        )
+        await db.verification_results.insert_one(error_result.dict())
+        return error_result
 
 # In-memory OIG data storage for fast searches
 oig_exclusions_cache = []
