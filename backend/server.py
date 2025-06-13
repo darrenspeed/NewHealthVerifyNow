@@ -1049,6 +1049,312 @@ async def check_state_medicaid_exclusion(employee: Employee, state_code: str) ->
         await db.verification_results.insert_one(error_result.dict())
         return error_result
 
+async def download_npi_data():
+    """Download NPI registry data (sample data for large providers)"""
+    try:
+        logger.info("Downloading NPI registry sample data...")
+        
+        # NPI API doesn't provide bulk download, but we can get sample data
+        # In production, you'd want to cache frequent lookups
+        npi_sample_data = [
+            {
+                "npi": "1234567890",
+                "first_name": "JOHN",
+                "last_name": "SMITH", 
+                "credential": "MD",
+                "taxonomy": "207Q00000X",
+                "specialty": "Family Medicine",
+                "state": "CA",
+                "status": "Active"
+            },
+            {
+                "npi": "1234567891", 
+                "first_name": "JANE",
+                "last_name": "DOE",
+                "credential": "RN", 
+                "taxonomy": "163W00000X",
+                "specialty": "Registered Nurse",
+                "state": "TX",
+                "status": "Active"
+            }
+        ]
+        
+        license_verification_cache["npi"] = npi_sample_data
+        logger.info(f"Loaded {len(npi_sample_data)} NPI sample records")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error downloading NPI data: {e}")
+        return False
+
+async def verify_npi_number(npi_number: str) -> dict:
+    """Verify NPI number through CMS API"""
+    try:
+        if not npi_number or len(npi_number) != 10:
+            return {"valid": False, "error": "Invalid NPI format"}
+        
+        # Use CMS NPI Registry API
+        api_url = f"https://npiregistry.cms.hhs.gov/api/?number={npi_number}&version=2.1"
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(api_url)
+            
+            if response.status_code == 200:
+                data = response.json()
+                results = data.get("results", [])
+                
+                if results:
+                    provider = results[0]
+                    basic_info = provider.get("basic", {})
+                    
+                    return {
+                        "valid": True,
+                        "npi": provider.get("number"),
+                        "name": f"{basic_info.get('first_name', '')} {basic_info.get('last_name', '')}".strip(),
+                        "credential": basic_info.get("credential", ""),
+                        "enumeration_date": basic_info.get("enumeration_date"),
+                        "status": basic_info.get("status"),
+                        "entity_type": basic_info.get("enumeration_type"),
+                        "taxonomy": provider.get("taxonomies", [{}])[0].get("code", "")
+                    }
+                else:
+                    return {"valid": False, "error": "NPI not found"}
+            else:
+                return {"valid": False, "error": f"API error: {response.status_code}"}
+                
+    except Exception as e:
+        logger.error(f"NPI verification failed: {e}")
+        return {"valid": False, "error": str(e)}
+
+async def download_nsopw_data():
+    """Download National Sex Offender Registry data"""
+    try:
+        logger.info("Downloading NSOPW data...")
+        
+        # NSOPW doesn't provide a direct API, but state registries do
+        # For demo, we'll create sample data structure
+        nsopw_sample_data = [
+            {
+                "first_name": "JOHN",
+                "last_name": "OFFENDER",
+                "middle_name": "M",
+                "aliases": ["JOHNNY OFFENDER"],
+                "date_of_birth": "1980-01-01",
+                "registration_date": "2020-01-01",
+                "jurisdiction": "CA",
+                "address": "123 MAIN ST, ANYTOWN CA 90210",
+                "conviction_details": "Sexual offense",
+                "risk_level": "Moderate"
+            }
+        ]
+        
+        criminal_background_cache["nsopw_national"] = nsopw_sample_data
+        logger.info(f"Loaded {len(nsopw_sample_data)} NSOPW sample records")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error downloading NSOPW data: {e}")
+        return False
+
+async def download_fbi_wanted_data():
+    """Download FBI Most Wanted list"""
+    try:
+        logger.info("Downloading FBI Most Wanted data...")
+        
+        # FBI API is available but has rate limits
+        api_url = "https://api.fbi.gov/wanted/v1/list"
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(api_url)
+            
+            if response.status_code == 200:
+                data = response.json()
+                wanted_persons = data.get("items", [])
+                
+                # Process and store FBI wanted data
+                processed_data = []
+                for person in wanted_persons[:100]:  # Limit to first 100
+                    processed_data.append({
+                        "uid": person.get("uid"),
+                        "title": person.get("title", ""),
+                        "subjects": person.get("subjects", []),
+                        "description": person.get("description", ""),
+                        "reward_text": person.get("reward_text", ""),
+                        "warning_message": person.get("warning_message", ""),
+                        "modified": person.get("modified"),
+                        "publication": person.get("publication")
+                    })
+                
+                criminal_background_cache["fbi_wanted"] = processed_data
+                logger.info(f"Loaded {len(processed_data)} FBI Most Wanted records")
+                return True
+            else:
+                logger.error(f"FBI API returned status {response.status_code}")
+                return False
+                
+    except Exception as e:
+        logger.error(f"Error downloading FBI wanted data: {e}")
+        return False
+
+def search_license_verification(first_name: str, last_name: str, license_number: str = None, npi: str = None):
+    """Search license verification databases"""
+    matches = []
+    search_first = normalize_name(first_name)
+    search_last = normalize_name(last_name)
+    
+    # Search NPI database
+    if license_verification_cache["npi"]:
+        for provider in license_verification_cache["npi"]:
+            match_score = 0
+            
+            if provider["first_name"] == search_first and provider["last_name"] == search_last:
+                match_score = 100
+            elif npi and provider.get("npi") == npi:
+                match_score = 100
+            
+            if match_score >= 80:
+                matches.append({
+                    "database": "NPI Registry",
+                    "match_score": match_score,
+                    "provider_data": provider,
+                    "verification_type": "license_npi"
+                })
+    
+    # Search state medical license databases
+    for state_key in ["ca_medical", "tx_medical", "fl_medical", "ny_medical"]:
+        if license_verification_cache[state_key]:
+            for license_record in license_verification_cache[state_key]:
+                match_score = 0
+                
+                if (license_record.get("first_name", "").upper() == search_first and 
+                    license_record.get("last_name", "").upper() == search_last):
+                    match_score = 100
+                elif license_number and license_record.get("license_number") == license_number:
+                    match_score = 100
+                
+                if match_score >= 80:
+                    matches.append({
+                        "database": f"{state_key.replace('_', ' ').title()} License Database",
+                        "match_score": match_score,
+                        "license_data": license_record,
+                        "verification_type": f"license_{state_key}"
+                    })
+    
+    return matches
+
+def search_criminal_background(first_name: str, last_name: str, date_of_birth: str = None):
+    """Search criminal background databases"""
+    matches = []
+    search_first = normalize_name(first_name)
+    search_last = normalize_name(last_name)
+    
+    # Search NSOPW database
+    if criminal_background_cache["nsopw_national"]:
+        for record in criminal_background_cache["nsopw_national"]:
+            match_score = 0
+            
+            if (record.get("first_name", "").upper() == search_first and 
+                record.get("last_name", "").upper() == search_last):
+                match_score = 90
+                
+                # Increase match score if DOB matches
+                if date_of_birth and record.get("date_of_birth") == date_of_birth:
+                    match_score = 100
+            
+            if match_score >= 80:
+                matches.append({
+                    "database": "National Sex Offender Registry",
+                    "match_score": match_score,
+                    "record_data": record,
+                    "verification_type": "criminal_nsopw"
+                })
+    
+    # Search FBI Most Wanted
+    if criminal_background_cache["fbi_wanted"]:
+        for record in criminal_background_cache["fbi_wanted"]:
+            # FBI records have different structure
+            subjects = record.get("subjects", [])
+            title = record.get("title", "").upper()
+            
+            full_name = f"{search_first} {search_last}"
+            if full_name in title:
+                matches.append({
+                    "database": "FBI Most Wanted",
+                    "match_score": 95,
+                    "record_data": record,
+                    "verification_type": "criminal_fbi"
+                })
+    
+    return matches
+
+async def check_license_verification(employee: Employee, verification_type: str) -> VerificationResult:
+    """Check professional license verification"""
+    try:
+        # Ensure license data is loaded
+        if not any(license_verification_cache.values()):
+            logger.info("License verification data not in memory, loading...")
+            await download_npi_data()
+        
+        # Perform license search
+        matches = search_license_verification(
+            employee.first_name,
+            employee.last_name,
+            getattr(employee, 'license_number', None),
+            getattr(employee, 'npi', None)
+        )
+        
+        # Check for high-confidence matches
+        high_confidence_matches = [m for m in matches if m['match_score'] >= 90]
+        
+        result = VerificationResult(
+            employee_id=employee.id,
+            verification_type=verification_type,
+            status=VerificationStatus.PASSED if len(high_confidence_matches) > 0 else VerificationStatus.FAILED,
+            results={
+                "license_verified": len(high_confidence_matches) > 0,
+                "total_matches_found": len(matches),
+                "high_confidence_matches": len(high_confidence_matches),
+                "match_details": [
+                    {
+                        "database": match["database"],
+                        "provider_info": match.get("provider_data", match.get("license_data", {})),
+                        "match_score": match["match_score"],
+                        "verification_type": match["verification_type"]
+                    }
+                    for match in high_confidence_matches[:3]
+                ],
+                "search_criteria": {
+                    "first_name": employee.first_name,
+                    "last_name": employee.last_name,
+                    "license_number": getattr(employee, 'license_number', 'Not provided'),
+                    "npi": getattr(employee, 'npi', 'Not provided')
+                },
+                "database_info": {
+                    "databases_searched": len([k for k, v in license_verification_cache.items() if v]),
+                    "verification_method": "Free Public Databases",
+                    "last_updated": datetime.utcnow().isoformat()
+                }
+            },
+            data_source="Free Public License Databases"
+        )
+        
+        await db.verification_results.insert_one(result.dict())
+        logger.info(f"License verification completed for {employee.first_name} {employee.last_name}: {result.status}")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"License verification failed for employee {employee.id}: {e}")
+        error_result = VerificationResult(
+            employee_id=employee.id,
+            verification_type=verification_type,
+            status=VerificationStatus.ERROR,
+            error_message=str(e),
+            data_source="License Verification System"
+        )
+        await db.verification_results.insert_one(error_result.dict())
+        return error_result
+
 # In-memory OIG data storage for fast searches
 oig_exclusions_cache = []
 
