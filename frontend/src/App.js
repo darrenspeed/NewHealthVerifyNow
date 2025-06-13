@@ -294,10 +294,10 @@ const EmployeeList = ({ employees, onVerifyEmployee }) => {
             </div>
 
             {/* Criminal Background */}
-            <div className="mb-3">
-              <h4 className="text-xs font-semibold text-gray-600 mb-2">CRIMINAL BACKGROUND</h4>
+            <div className="mb-3 border-2 border-red-200 p-2 rounded">
+              <h4 className="text-xs font-semibold text-gray-600 mb-2 bg-red-50 p-1">🚨 CRIMINAL BACKGROUND</h4>
               <div className="flex flex-wrap gap-2">
-                <label className="flex items-center">
+                <label className="flex items-center bg-white p-2 border rounded">
                   <input
                     type="checkbox"
                     checked={verificationTypes.includes('nsopw')}
@@ -310,9 +310,9 @@ const EmployeeList = ({ employees, onVerifyEmployee }) => {
                     }}
                     className="mr-2"
                   />
-                  <span className="text-sm bg-red-100 text-red-800 px-3 py-1 rounded-full">Sex Offender Registry</span>
+                  <span className="text-sm bg-red-100 text-red-800 px-3 py-1 rounded-full font-bold">🔍 Sex Offender Registry</span>
                 </label>
-                <label className="flex items-center">
+                <label className="flex items-center bg-white p-2 border rounded">
                   <input
                     type="checkbox"
                     checked={verificationTypes.includes('criminal')}
@@ -325,7 +325,7 @@ const EmployeeList = ({ employees, onVerifyEmployee }) => {
                     }}
                     className="mr-2"
                   />
-                  <span className="text-sm bg-gray-100 text-gray-800 px-3 py-1 rounded-full">FBI Most Wanted</span>
+                  <span className="text-sm bg-gray-100 text-gray-800 px-3 py-1 rounded-full font-bold">🚨 FBI Most Wanted</span>
                 </label>
               </div>
             </div>
