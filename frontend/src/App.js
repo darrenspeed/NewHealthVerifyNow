@@ -601,8 +601,10 @@ const MainApp = () => {
 
   const handleVerifyEmployee = async (employeeId) => {
     try {
-      await axios.post(`${API}/employees/${employeeId}/verify`, ['oig', 'sam']);
-      alert('Verification started!');
+      // Include both federal and state verification types for comprehensive check
+      const verificationTypes = ['oig', 'sam', 'medicaid_ca', 'medicaid_tx', 'medicaid_fl', 'medicaid_ny'];
+      await axios.post(`${API}/employees/${employeeId}/verify`, verificationTypes);
+      alert('Comprehensive verification started (Federal + State Medicaid)!');
       // Refresh results after a short delay
       setTimeout(() => {
         fetchVerificationResults();
