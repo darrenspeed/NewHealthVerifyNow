@@ -256,6 +256,7 @@ const EmployeeList = ({ employees, onVerifyEmployee }) => {
           <div className="flex items-center space-x-2">
             <label className="text-sm font-medium text-gray-700">Verification Types:</label>
             <div className="flex flex-wrap gap-2">
+              {/* Federal Exclusions */}
               <label className="flex items-center">
                 <input
                   type="checkbox"
@@ -286,6 +287,87 @@ const EmployeeList = ({ employees, onVerifyEmployee }) => {
                 />
                 <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">SAM</span>
               </label>
+              
+              {/* License Verification */}
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={verificationTypes.includes('npi')}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setVerificationTypes([...verificationTypes, 'npi']);
+                    } else {
+                      setVerificationTypes(verificationTypes.filter(t => t !== 'npi'));
+                    }
+                  }}
+                  className="mr-1"
+                />
+                <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">NPI Registry</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={verificationTypes.includes('license_md_ca')}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setVerificationTypes([...verificationTypes, 'license_md_ca']);
+                    } else {
+                      setVerificationTypes(verificationTypes.filter(t => t !== 'license_md_ca'));
+                    }
+                  }}
+                  className="mr-1"
+                />
+                <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">CA Medical</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={verificationTypes.includes('license_rn_ca')}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setVerificationTypes([...verificationTypes, 'license_rn_ca']);
+                    } else {
+                      setVerificationTypes(verificationTypes.filter(t => t !== 'license_rn_ca'));
+                    }
+                  }}
+                  className="mr-1"
+                />
+                <span className="text-xs bg-pink-100 text-pink-800 px-2 py-1 rounded">CA Nursing</span>
+              </label>
+              
+              {/* Criminal Background */}
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={verificationTypes.includes('nsopw_national')}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setVerificationTypes([...verificationTypes, 'nsopw_national']);
+                    } else {
+                      setVerificationTypes(verificationTypes.filter(t => t !== 'nsopw_national'));
+                    }
+                  }}
+                  className="mr-1"
+                />
+                <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">Sex Offender</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={verificationTypes.includes('fbi_wanted')}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setVerificationTypes([...verificationTypes, 'fbi_wanted']);
+                    } else {
+                      setVerificationTypes(verificationTypes.filter(t => t !== 'fbi_wanted'));
+                    }
+                  }}
+                  className="mr-1"
+                />
+                <span className="text-xs bg-gray-100 text-gray-800 px-2 py-1 rounded">FBI Wanted</span>
+              </label>
+              
+              {/* State Medicaid */}
               <label className="flex items-center">
                 <input
                   type="checkbox"
@@ -315,36 +397,6 @@ const EmployeeList = ({ employees, onVerifyEmployee }) => {
                   className="mr-1"
                 />
                 <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">TX Medicaid</span>
-              </label>
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={verificationTypes.includes('medicaid_fl')}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setVerificationTypes([...verificationTypes, 'medicaid_fl']);
-                    } else {
-                      setVerificationTypes(verificationTypes.filter(t => t !== 'medicaid_fl'));
-                    }
-                  }}
-                  className="mr-1"
-                />
-                <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">FL Medicaid</span>
-              </label>
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={verificationTypes.includes('medicaid_ny')}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setVerificationTypes([...verificationTypes, 'medicaid_ny']);
-                    } else {
-                      setVerificationTypes(verificationTypes.filter(t => t !== 'medicaid_ny'));
-                    }
-                  }}
-                  className="mr-1"
-                />
-                <span className="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded">NY Medicaid</span>
               </label>
             </div>
           </div>
