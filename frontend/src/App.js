@@ -432,7 +432,7 @@ const EmployeeList = ({ employees, onVerifyEmployee }) => {
   );
 };
 
-const VerificationResults = ({ results }) => {
+const VerificationResults = ({ results, employees }) => {
   const getStatusColor = (status) => {
     switch (status) {
       case 'passed': return 'text-green-600 bg-green-100';
@@ -441,6 +441,14 @@ const VerificationResults = ({ results }) => {
       case 'error': return 'text-gray-600 bg-gray-100';
       default: return 'text-gray-600 bg-gray-100';
     }
+  };
+
+  const getEmployeeName = (employeeId) => {
+    const employee = employees.find(emp => emp.id === employeeId);
+    if (employee) {
+      return `${employee.first_name} ${employee.middle_name ? employee.middle_name + ' ' : ''}${employee.last_name}`;
+    }
+    return employeeId; // fallback to ID if employee not found
   };
 
   return (
