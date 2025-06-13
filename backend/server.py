@@ -1613,85 +1613,113 @@ async def check_oig_exclusion(employee: Employee) -> VerificationResult:
         return error_result
 
 async def check_sam_exclusion(employee: Employee) -> VerificationResult:
-    """Check if employee is in SAM exclusion list using downloaded SAM data
-    
-    This function now uses locally downloaded SAM data for real-time searches,
-    similar to how OIG verification works.
-    """
+    """Check if employee is in SAM exclusion list using SAM.gov API v4"""
     try:
-        # Ensure SAM data is loaded
-        if not sam_exclusions_cache:
-            logger.info("SAM data not in memory, loading...")
-            await load_sam_data_to_memory()
-        
-        if not sam_exclusions_cache:
-            logger.error("Failed to load SAM exclusion data")
+        sam_api_key = os.environ.get('SAM_API_KEY')
+        if not sam_api_key:
+            logger.warning("SAM API key not configured")
             result = VerificationResult(
                 employee_id=employee.id,
                 verification_type=VerificationType.SAM,
                 status=VerificationStatus.ERROR,
-                error_message="SAM exclusion database not available",
-                data_source="SAM.gov Bulk Data"
+                error_message="SAM API key not configured",
+                data_source="SAM.gov API v4"
             )
             await db.verification_results.insert_one(result.dict())
             return result
+
+        # SAM.gov API endpoint for exclusions - updated to current v4 API
+        base_url = "https://api.sam.gov/exclusions/v4"
         
-        # Search for matches using local data
-        matches = search_sam_exclusions(
-            employee.first_name, 
-            employee.last_name, 
-            employee.middle_name
-        )
+        # Search parameters for v4 API - search by exclusionName
+        params = {
+            "api_key": sam_api_key,
+            "exclusionName": f"{employee.first_name} {employee.last_name}",
+            "recordStatus": "Active"
+        }
         
-        # Prepare match details for high-confidence matches
-        high_confidence_matches = [m for m in matches if m['match_score'] >= 90]
-        
-        result = VerificationResult(
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            logger.info(f"Checking SAM v4 exclusions for {employee.first_name} {employee.last_name}")
+            response = await client.get(base_url, params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # v4 API response structure
+                exclusions = data.get('exclusionDetails', [])
+                total_records = data.get('totalRecords', 0)
+                
+                # If we found matches, do additional verification
+                verified_matches = []
+                if exclusions:
+                    for exclusion in exclusions:
+                        # Extract name fields from v4 API response
+                        exclusion_names = exclusion.get('exclusionDetails', {}).get('exclusionName', '')
+                        
+                        # More sophisticated matching logic for v4 API
+                        emp_full_name = f"{employee.first_name} {employee.last_name}".lower()
+                        exclusion_name_lower = exclusion_names.lower()
+                        
+                        # Check if employee name matches exclusion name
+                        if (employee.first_name.lower() in exclusion_name_lower and 
+                            employee.last_name.lower() in exclusion_name_lower):
+                            
+                            # Extract relevant details from v4 API structure
+                            match_details = {
+                                "exclusion_name": exclusion_names,
+                                "exclusion_type": exclusion.get('exclusionDetails', {}).get('exclusionType', ''),
+                                "exclusion_date": exclusion.get('exclusionDetails', {}).get('exclusionDate', ''),
+                                "termination_date": exclusion.get('exclusionDetails', {}).get('terminationDate', ''),
+                                "sam_number": exclusion.get('exclusionDetails', {}).get('samNumber', ''),
+                                "cage_code": exclusion.get('exclusionDetails', {}).get('cageCode', ''),
+                                "npi": exclusion.get('exclusionDetails', {}).get('npi', ''),
+                                "address": exclusion.get('exclusionDetails', {}).get('address', {}),
+                                "classification": exclusion.get('exclusionDetails', {}).get('classification', '')
+                            }
+                            verified_matches.append(match_details)
+                
+                result = VerificationResult(
+                    employee_id=employee.id,
+                    verification_type=VerificationType.SAM,
+                    status=VerificationStatus.FAILED if len(verified_matches) > 0 else VerificationStatus.PASSED,
+                    results={
+                        "excluded": len(verified_matches) > 0,
+                        "total_records_found": total_records,
+                        "verified_matches": len(verified_matches),
+                        "match_details": verified_matches[:3] if verified_matches else [],  # Limit to first 3 matches
+                        "search_criteria": {
+                            "first_name": employee.first_name,
+                            "last_name": employee.last_name,
+                            "exclusion_name_query": params["exclusionName"]
+                        },
+                        "api_response_summary": {
+                            "status_code": response.status_code,
+                            "total_records": total_records,
+                            "exclusions_count": len(exclusions),
+                            "api_version": "v4"
+                        }
+                    },
+                    data_source="SAM.gov API v4"
+                )
+                
+                # Store result in database
+                await db.verification_results.insert_one(result.dict())
+                
+                logger.info(f"SAM v4 check completed for {employee.first_name} {employee.last_name}: {result.status} ({len(verified_matches)} verified matches)")
+                
+                return result
+                
+    except httpx.TimeoutException:
+        logger.error(f"SAM API timeout for employee {employee.id}")
+        error_result = VerificationResult(
             employee_id=employee.id,
             verification_type=VerificationType.SAM,
-            status=VerificationStatus.FAILED if len(high_confidence_matches) > 0 else VerificationStatus.PASSED,
-            results={
-                "excluded": len(high_confidence_matches) > 0,
-                "total_matches_found": len(matches),
-                "high_confidence_matches": len(high_confidence_matches),
-                "match_details": [
-                    {
-                        "exclusion_name": match['exclusion']['exclusion_name'] or f"{match['exclusion']['first_name']} {match['exclusion']['last_name']}".strip(),
-                        "exclusion_type": match['exclusion']['exclusion_type'],
-                        "exclusion_program": match['exclusion']['exclusion_program'],
-                        "excluding_agency": match['exclusion']['excluding_agency'],
-                        "activation_date": match['exclusion']['activation_date'],
-                        "termination_date": match['exclusion']['termination_date'],
-                        "sam_number": match['exclusion']['sam_number'],
-                        "cage_code": match['exclusion']['cage_code'],
-                        "classification": match['exclusion']['classification'],
-                        "address": f"{match['exclusion']['address_line1']}, {match['exclusion']['city']}, {match['exclusion']['state_province']} {match['exclusion']['zip_code']} {match['exclusion']['country']}".strip().rstrip(','),
-                        "match_score": match['match_score']
-                    }
-                    for match in high_confidence_matches[:5]  # Limit to top 5 matches
-                ],
-                "search_criteria": {
-                    "first_name": employee.first_name,
-                    "last_name": employee.last_name,
-                    "middle_name": employee.middle_name,
-                    "ssn_last_4": employee.ssn[-4:] if len(employee.ssn) >= 4 else "N/A"
-                },
-                "database_info": {
-                    "total_exclusions_in_database": len(sam_exclusions_cache),
-                    "last_updated": datetime.utcnow().isoformat(),
-                    "source": "SAM.gov Bulk Data Download",
-                    "verification_method": "Local Search"
-                }
-            },
-            data_source="SAM.gov Bulk Data"
+            status=VerificationStatus.ERROR,
+            error_message="SAM API request timed out",
+            data_source="SAM.gov API v4"
         )
-        
-        # Store result in database
-        await db.verification_results.insert_one(result.dict())
-        
-        logger.info(f"SAM check completed for {employee.first_name} {employee.last_name}: {result.status} ({len(high_confidence_matches)} high-confidence matches)")
-        
-        return result
+        await db.verification_results.insert_one(error_result.dict())
+        return error_result
         
     except Exception as e:
         logger.error(f"Error checking SAM exclusion for employee {employee.id}: {e}")
@@ -1700,19 +1728,7 @@ async def check_sam_exclusion(employee: Employee) -> VerificationResult:
             verification_type=VerificationType.SAM,
             status=VerificationStatus.ERROR,
             error_message=str(e),
-            data_source="SAM.gov Bulk Data"
-        )
-        await db.verification_results.insert_one(error_result.dict())
-        return error_result
-        
-    except httpx.TimeoutException:
-        logger.error(f"SAM API timeout for employee {employee.id}")
-        error_result = VerificationResult(
-            employee_id=employee.id,
-            verification_type=VerificationType.SAM,
-            status=VerificationStatus.ERROR,
-            error_message="SAM API request timed out",
-            data_source="SAM.gov API"
+            data_source="SAM.gov API v4"
         )
         await db.verification_results.insert_one(error_result.dict())
         return error_result
