@@ -380,16 +380,6 @@ const EmployeeList = ({ employees, onVerifyEmployee }) => {
           </button>
         </div>
       </div>
-          
-          <button
-            onClick={handleBatchVerify}
-            disabled={selectedEmployees.size === 0}
-            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50"
-          >
-            Verify Selected ({selectedEmployees.size})
-          </button>
-        </div>
-      </div>
 
       <div className="overflow-x-auto">
         <table className="min-w-full table-auto">
